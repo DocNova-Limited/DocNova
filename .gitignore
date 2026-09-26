@@ -1,0 +1,14 @@
+# Private runtime data and secrets
+private/
+.env
+.env.*
+!.env.example
+*.sqlite3
+*.sqlite3-*
+*.db
+# Runtime and editor files
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+.venv/

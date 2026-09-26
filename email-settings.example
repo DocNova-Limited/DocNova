@@ -1,0 +1,7 @@
+# Supply these through the server environment, never in browser JavaScript.
+DOCNOVA_SMTP_HOST=
+DOCNOVA_SMTP_PORT=587
+DOCNOVA_SMTP_USER=
+DOCNOVA_SMTP_PASSWORD=
+DOCNOVA_FROM_EMAIL=
+DOCNOVA_PUBLIC_URL=
