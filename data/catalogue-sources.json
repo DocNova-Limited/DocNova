@@ -1,0 +1,34 @@
+{
+  "price_source": "https://docnova.co.uk/shop/",
+  "verified_on": "2026-09-25",
+  "prices_gbp": {
+    "scrub_top": 44.99,
+    "scrub_trousers": 49.99,
+    "matching_set": 94.98,
+    "blood_pressure_monitor": 44.99,
+    "infrared_thermometer": 34.99
+  },
+  "set_price_note": "Sum of separately priced top and trousers; no bundle discount.",
+  "scrub_sizes": [
+    "S",
+    "M",
+    "L",
+    "XL"
+  ],
+  "size_source": "Confirmed by owner in this task.",
+  "colours": [
+    "Black",
+    "Navy Blue",
+    "Royal Blue",
+    "Pewter Grey",
+    "Green",
+    "Pink",
+    "Burgundy"
+  ],
+  "photos": "Supplied scrub photographs and official company logo are bundled locally. Medical-device photographs downloaded from the source website and bundled in dist/assets/devices.",
+  "live_services": {
+    "email": "Prepared SMTP integration; no credentials configured.",
+    "payments": "Demo checkout only.",
+    "google_reviews": "Not connected; embed code pending."
+  }
+}
