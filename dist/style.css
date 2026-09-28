@@ -46,3 +46,10 @@ footer .official-logo img{filter:grayscale(1) invert(1) brightness(1.5)}
 .gr-list[data-count="4"],.gr-list[data-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}.gr-list[data-count="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}.gr-list[data-count="1"]{grid-template-columns:minmax(0,560px)}.gr-card h3{text-transform:capitalize}
 @media(max-width:1100px){.gr-list[data-count="3"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.gr-list[data-count]{display:flex}}
+
+.policy h3{font-size:20px;margin:34px 0 8px}.policy p{line-height:1.7}.contact-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:30px 0}.contact-cards>div{border:1px solid var(--line,#e2e0da);background:#fff;padding:20px 22px}.contact-cards p{margin:8px 0 0;color:var(--ink,#182130);font-size:17px}@media(max-width:640px){.contact-cards{grid-template-columns:1fr}}
+.device-points{margin:14px 0 22px;padding:0;list-style:none}.device-points li{padding:6px 0 6px 26px;position:relative;color:var(--ink,#182130)}.device-points li:before{content:'✓';position:absolute;left:0;color:#004c9b;font-weight:700}.spec-table{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:15px}.spec-table th{text-align:left;font-weight:500;color:var(--muted,#5f6671);padding:9px 12px 9px 0;width:42%;border-bottom:1px solid #e6e3dd;vertical-align:top}.spec-table td{padding:9px 0;border-bottom:1px solid #e6e3dd}
+.device-category>img{object-fit:cover;object-position:center;padding:0;background:#e9eef3}.device-media,.device-media img{background:#e9eef3}
+.footer-logo{display:block;margin:6px 0 20px}.footer-logo img{width:170px;height:auto;display:block}.socials{display:flex;gap:10px;margin-top:18px}.socials .social{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid #ffffff40;border-radius:50%;padding:0;color:#fff}.socials .social:hover{background:#ffffff18}
+.device-media img{object-fit:cover!important}.gallery-main.device-photo{background:linear-gradient(#eef2f8,#dde5f0)}.contact-cards a{font-size:17px}
+.device-media img{object-position:50% 65%}
