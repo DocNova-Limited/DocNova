@@ -4,5 +4,7 @@ RUNTIME_PYTHON='/Users/drusmanmacbookpro/.cache/codex-runtimes/codex-primary-run
 if [ ! -x "$RUNTIME_PYTHON" ]; then
   RUNTIME_PYTHON=python3
 fi
-open 'http://127.0.0.1:4173/'
+# Port 4180 is reserved for this copy of the site, so an older preview left running on 4173 can't hide it.
+export DOCNOVA_PORT=4180
+( sleep 2; open 'http://127.0.0.1:4180/' ) &
 exec "$RUNTIME_PYTHON" server.py

@@ -10,7 +10,7 @@ Requires Python 3.10 or newer. No external Python packages, Node installation, o
 python3 server.py
 ```
 
-Open http://127.0.0.1:4173/ in a browser. On this Mac, `Start DocNova.command` also launches the site. Keep the server running while viewing it. If port 4173 is already in use, stop the previous preview server first.
+Open http://127.0.0.1:4173/ in a browser. On this Mac, double-click `Start DocNova.command` instead: it runs the site at http://127.0.0.1:4180/ and opens it for you. Keep the server running while viewing it. If port 4173 is already in use, stop the previous preview server first.
 
 For Windows, use `py server.py` if `python3` is unavailable.
 
