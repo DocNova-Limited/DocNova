@@ -43,3 +43,6 @@ footer .official-logo img{filter:grayscale(1) invert(1) brightness(1.5)}
 .gr-foot{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding-top:14px;border-top:1px solid var(--line)}.gr-foot a{margin-left:auto;color:var(--ink)}.gr-g{width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font:700 11px Arial;color:#4285f4}
 .gr-loading{min-height:120px}
 @media(max-width:800px){.gr-wrap{grid-template-columns:1fr;gap:28px}.gr-summary{position:static}.gr-num{font-size:56px}.gr-list{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:14px;margin-inline:-5%;padding:0 5% 8px}.gr-card{flex:0 0 84%;scroll-snap-align:start}}
+.gr-list[data-count="4"],.gr-list[data-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}.gr-list[data-count="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}.gr-list[data-count="1"]{grid-template-columns:minmax(0,560px)}.gr-card h3{text-transform:capitalize}
+@media(max-width:1100px){.gr-list[data-count="3"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.gr-list[data-count]{display:flex}}

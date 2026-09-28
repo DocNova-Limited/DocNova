@@ -1,0 +1,12 @@
+{
+  "_about": "Reviews copied word for word from DocNova's Google Business Profile, shown on the site until the live Google connection (GOOGLE_PLACES_API_KEY) is set up. Once it is, live reviews replace these automatically. Keep text exactly as written on Google, and update rating/count when they change.",
+  "checked_on": "2026-09-28",
+  "rating": 5.0,
+  "count": 4,
+  "reviews": [
+    {"author": "Maria Abbasi", "rating": 5, "text": "I absolutely love these scrubs! They are incredibly comfortable, and I get so many compliments on both the color and the fit every time I wear them. The multiple pockets are a huge plus—they're perfect for keeping everything I need close by during a busy workday. I've owned scrubs from another popular brand, but these are by far the best. The comfort, quality, fit, and functionality are outstanding. I highly recommend them to anyone looking for scrubs that look great and perform even better!"},
+    {"author": "Khulood H", "rating": 5, "text": "Amazing! The quality is better than Figs and I am so impressed by their customer service!! I’m their loyal customer now and everyone at the hospital loves their scrubs too"},
+    {"author": "manzoor", "rating": 5, "text": "Amazing quality products, genuine care for customers. Ordered the blood pressure machine for my dad it works better than any normal ones. Looking forward to being a returning customer!"},
+    {"author": "Alishba Fatima", "rating": 5, "text": "Great experience! Professional service, quality products, and fast response. Highly recommended."}
+  ]
+}

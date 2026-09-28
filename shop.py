@@ -488,11 +488,21 @@ def google_links(place_id):
     return {'maps': 'https://www.google.com/maps/place/?q=place_id:' + place_id,
             'write': 'https://search.google.com/local/writereview?placeid=' + place_id}
 
+def featured_reviews():
+    """Real Google reviews copied into data/featured-reviews.json, shown until the live connection is set up."""
+    try:
+        data = json.loads((ROOT / 'data' / 'featured-reviews.json').read_text(encoding='utf-8'))
+        reviews = [r for r in data.get('reviews', []) if r.get('author') and r.get('text')][:4]
+        return {'rating': data.get('rating'), 'count': data.get('count'), 'reviews': reviews} if reviews else None
+    except (OSError, ValueError):
+        return None
+
 def google_reviews():
     """Live rating and reviews from Google. Held in memory for an hour only; never written to disk."""
     place_id = os.getenv('GOOGLE_PLACE_ID', DEFAULT_PLACE_ID).strip()
     key = os.getenv('GOOGLE_PLACES_API_KEY', '').strip()
     base = {'links': google_links(place_id), 'source': 'google'}
+    base['featured'] = featured_reviews()
     if not key:
         return {**base, 'live': False}
     now = time.time()

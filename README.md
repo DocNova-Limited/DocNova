@@ -10,7 +10,7 @@ Requires Python 3.10 or newer. No external Python packages, Node installation, o
 python3 server.py
 ```
 
-Open http://127.0.0.1:4173/ in a browser. On this Mac, double-click `Start DocNova.command` instead: it runs the site at http://127.0.0.1:4180/ and opens it for you. Keep the server running while viewing it. If port 4173 is already in use, stop the previous preview server first.
+Open http://127.0.0.1:4173/ in a browser. On this Mac, `Start DocNova.command` also launches the site. Keep the server running while viewing it. If port 4173 is already in use, stop the previous preview server first.
 
 For Windows, use `py server.py` if `python3` is unavailable.
 
@@ -64,7 +64,7 @@ The welcome email includes an unsubscribe link. Its confirmation form marks the 
 The bottom of the home page (and each product page) shows DocNova’s live Google rating and reviews in the site’s own design. The server asks Google’s Places API at most once an hour and keeps the answer in memory only. That’s about 720 requests a month, inside Google’s free allowance of 1,000 for this request type.
 
 - **Set up once:** in Google Cloud Console, create a project, enable **Places API (New)**, create an API key restricted to that API, and put it in `.env` as `GOOGLE_PLACES_API_KEY`. Google requires a billing account on the project, even when usage stays inside the free allowance. The DocNova Place ID (`ChIJsYc-YLZng2URQNsyBvUhTec`) is already built in.
-- **Without a key**, the section still shows, with “Read our Google reviews” and “Write a review” buttons linking to your Google profile.
+- **Without a key**, the section shows the four real reviews saved in `data/featured-reviews.json` (copied word for word from Google on 28 Sept 2026), with the rating and links to your Google profile. Update that file if you want different reviews shown before the key is set up. With a key, live reviews replace them automatically (highest-rated first, up to four).
 - **Google’s rules, followed here:** reviews are shown unedited, with the reviewer’s name and a link to each review on Google Maps, and with a note on how they’re chosen. Google returns up to 5 reviews, the ones it ranks most relevant.
 
 ## Payments with Stripe
