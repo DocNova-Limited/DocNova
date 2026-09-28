@@ -186,6 +186,26 @@ class Handler(SimpleHTTPRequestHandler):
             db.execute("UPDATE subscribers SET status='sent' WHERE email=?", (email,))
         return self.reply(200, {'status': 'sent'})
 
+def poll_pending_orders():
+    """Without a webhook (e.g. testing on a laptop), ask Stripe every 30 seconds about recent unpaid orders."""
+    import threading
+    def loop():
+        while True:
+            time.sleep(30)
+            try:
+                with shop.db() as conn:
+                    rows = [dict(r) for r in conn.execute(
+                        "SELECT * FROM orders WHERE status IN ('awaiting_payment','processing') AND checkout_session_id IS NOT NULL AND created_at > ?",
+                        (int(time.time()) - 86400,))]
+            except Exception:
+                continue
+            for order in rows:  # one bad order never stops the others
+                try:
+                    shop.refresh_order_from_stripe(order)
+                except Exception:
+                    pass
+    threading.Thread(target=loop, daemon=True).start()
+
 if __name__ == '__main__':
     host, port = os.getenv('DOCNOVA_HOST', '127.0.0.1'), int(os.getenv('DOCNOVA_PORT', '4173'))
     print('DocNova preview: http://%s:%d/' % (host, port), flush=True)
@@ -196,5 +216,6 @@ if __name__ == '__main__':
                         'live': 'LIVE mode — real payments',
                         'blocked-live': 'live key found but DOCNOVA_STRIPE_LIVE=1 is not set — checkout disabled'}[mode], flush=True)
     if mode in ('test', 'live') and not os.getenv('STRIPE_WEBHOOK_SECRET'):
-        print('WARNING: STRIPE_WEBHOOK_SECRET is not set — paid orders will only be confirmed when the customer returns to the site.', flush=True)
+        print('No webhook secret set — checking Stripe every 30 seconds for new payments instead (fine for testing; set up the webhook before going live).', flush=True)
+        poll_pending_orders()
     ThreadingHTTPServer((host, port), Handler).serve_forever()

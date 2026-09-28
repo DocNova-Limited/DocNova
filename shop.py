@@ -7,7 +7,7 @@ from pathlib import Path
 from email.message import EmailMessage
 from urllib.parse import quote, urlencode
 import hashlib, hmac, json, os, re, secrets, smtplib, sqlite3, ssl, threading, time
-import urllib.error, urllib.request
+import http.client, urllib.error, urllib.request
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'private' / 'subscriptions.sqlite3'
@@ -251,6 +251,8 @@ def stripe_request(method, path, params=None, idempotency_key=None):
         raise StripeError(err.get('message') or 'Stripe request failed', e.code, err.get('code')) from None
     except urllib.error.URLError as e:
         raise StripeError('Could not reach Stripe: ' + str(e.reason), 502) from None
+    except (OSError, http.client.HTTPException, ValueError) as e:  # dropped connection, timeout, bad reply
+        raise StripeError('Stripe connection problem: ' + e.__class__.__name__, 502) from None
 
 def ensure_coupon(code):
     """Create the Stripe coupon behind a site discount code the first time it is used."""
