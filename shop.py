@@ -14,7 +14,7 @@ DB = ROOT / 'private' / 'subscriptions.sqlite3'
 STRIPE_API_VERSION = '2026-08-26.dahlia'
 # Tags every Checkout Session so this flow can be found and compared in the Stripe Dashboard.
 INTEGRATION_ID = 'docnova-storefront-checkout-qmvhtrkw'
-SIZES = ('S', 'M', 'L', 'XL')
+SIZES = ('S', 'M', 'L', 'XL', '2XL')
 MAX_QTY_PER_LINE, MAX_LINES = 20, 30
 DELIVERY_PENCE, FREE_DELIVERY_FROM_PENCE = 495, 10000
 COUPONS = {'WELCOME10': {'stripe_id': 'docnova-welcome10', 'percent_off': 10, 'name': 'WELCOME10 · 10% off products'}}
@@ -63,8 +63,8 @@ def _field(obj, name):
 def catalogue():
     """Prices come from dist/app.js, the same file the shop page uses, so they can never drift apart.
 
-    Mirrors the catalogue code at the top of app.js: the listed products, plus a separate top and
-    trousers for every photographed scrub colour, plus the medical devices.
+    Mirrors the catalogue code at the top of app.js: the listed products, plus a separate top,
+    trousers and set for every photographed scrub colour, plus the medical devices.
     """
     path = ROOT / 'dist' / 'app.js'
     mtime = path.stat().st_mtime
@@ -87,9 +87,9 @@ def catalogue():
 
     products = parse(listed)
     for look in list(products):
-        for category, label, price in (('Tops', 'Top', 4499), ('Pants', 'Trousers', 4999)):
+        for category, label, price in (('Tops', 'Top', 4499), ('Pants', 'Trousers', 4999), ('Sets', 'Set', 9498)):
             if not any(p['fit'] == look['fit'] and p['color'] == look['color'] and p['category'] == category for p in products):
-                pid = f"{look['fit'].lower()}-{look['color'].lower().replace(' ', '-')}-{'top' if category == 'Tops' else 'trousers'}"
+                pid = f"{look['fit'].lower()}-{look['color'].lower().replace(' ', '-')}-{ {'Tops': 'top', 'Sets': 'set'}.get(category, 'trousers')}"
                 products.append({**look, 'id': pid, 'name': f"DocNova Premium Scrub {label} – {look['color']}",
                                  'category': category, 'pence': price})
     products += parse(pushed)
