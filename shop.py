@@ -477,3 +477,48 @@ CARRIER_TRACKING = {'royal mail': 'https://www.royalmail.com/track-your-item#/tr
 def tracking_url_for(carrier, number):
     template = CARRIER_TRACKING.get((carrier or '').strip().lower())
     return template.format(n=quote(number)) if template and number else None
+
+# ---------------------------------------------------------------- Google reviews (Places API, New)
+# DocNova's Google Business Profile. Confirmed from the business's Google share link (feature id 0x658367b6603e87b1:0xe74d21f50632db40).
+DEFAULT_PLACE_ID = 'ChIJsYc-YLZng2URQNsyBvUhTec'
+_reviews_cache = {'at': 0, 'data': None}
+REVIEWS_TTL = 3600  # one Google call per hour at most: ~720 a month, inside Google's 1,000 free calls
+
+def google_links(place_id):
+    return {'maps': 'https://www.google.com/maps/place/?q=place_id:' + place_id,
+            'write': 'https://search.google.com/local/writereview?placeid=' + place_id}
+
+def google_reviews():
+    """Live rating and reviews from Google. Held in memory for an hour only; never written to disk."""
+    place_id = os.getenv('GOOGLE_PLACE_ID', DEFAULT_PLACE_ID).strip()
+    key = os.getenv('GOOGLE_PLACES_API_KEY', '').strip()
+    base = {'links': google_links(place_id), 'source': 'google'}
+    if not key:
+        return {**base, 'live': False}
+    now = time.time()
+    if _reviews_cache['data'] and now - _reviews_cache['at'] < REVIEWS_TTL:
+        return _reviews_cache['data']
+    req = urllib.request.Request(os.getenv('GOOGLE_PLACES_API_BASE', 'https://places.googleapis.com').rstrip('/') + '/v1/places/' + quote(place_id) + '?languageCode=en&regionCode=GB')
+    req.add_header('X-Goog-Api-Key', key)
+    req.add_header('X-Goog-FieldMask', 'displayName,rating,userRatingCount,googleMapsUri,reviews')
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            raw = json.loads(res.read())
+    except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError):
+        # Google unreachable: keep showing the last answer for up to 6 hours, then fall back to links only.
+        if _reviews_cache['data'] and now - _reviews_cache['at'] < 6 * 3600:
+            return _reviews_cache['data']
+        return {**base, 'live': False}
+    reviews = []
+    for r in raw.get('reviews') or []:
+        author = r.get('authorAttribution') or {}
+        text = (r.get('text') or r.get('originalText') or {}).get('text', '')
+        reviews.append({'author': author.get('displayName') or 'Google user', 'author_url': author.get('uri'),
+                        'photo': author.get('photoUri'), 'rating': r.get('rating'), 'text': text,
+                        'when': r.get('relativePublishTimeDescription'), 'published': r.get('publishTime'),
+                        'url': r.get('googleMapsUri')})
+    data = {**base, 'live': True, 'name': (raw.get('displayName') or {}).get('text', 'DocNova'),
+            'rating': raw.get('rating'), 'count': raw.get('userRatingCount'),
+            'maps_url': raw.get('googleMapsUri') or base['links']['maps'], 'reviews': reviews}
+    _reviews_cache.update(at=now, data=data)
+    return data

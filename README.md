@@ -59,6 +59,14 @@ The server creates `private/subscriptions.sqlite3` automatically. This repositor
 
 The welcome email includes an unsubscribe link. Its confirmation form marks the address unsubscribed. Any future marketing tool must honour that status. Pending signups are not automatically sent when SMTP is later configured; they must be deliberately processed or the customer can subscribe again. Browser preference resets do not delete server-side records.
 
+## Live Google reviews
+
+The bottom of the home page (and each product page) shows DocNova’s live Google rating and reviews in the site’s own design. The server asks Google’s Places API at most once an hour and keeps the answer in memory only. That’s about 720 requests a month, inside Google’s free allowance of 1,000 for this request type.
+
+- **Set up once:** in Google Cloud Console, create a project, enable **Places API (New)**, create an API key restricted to that API, and put it in `.env` as `GOOGLE_PLACES_API_KEY`. Google requires a billing account on the project, even when usage stays inside the free allowance. The DocNova Place ID (`ChIJsYc-YLZng2URQNsyBvUhTec`) is already built in.
+- **Without a key**, the section still shows, with “Read our Google reviews” and “Write a review” buttons linking to your Google profile.
+- **Google’s rules, followed here:** reviews are shown unedited, with the reviewer’s name and a link to each review on Google Maps, and with a note on how they’re chosen. Google returns up to 5 reviews, the ones it ranks most relevant.
+
 ## Payments with Stripe
 
 Checkout uses **Stripe Checkout** (Stripe’s hosted payment page). The customer reviews their bag on the site, presses *Continue to secure payment*, pays on Stripe, and returns to an order confirmation page with their order number.

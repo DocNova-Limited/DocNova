@@ -75,6 +75,8 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == '/api/payment-methods':
             data = shop.payment_methods()
             return self.reply(200, {**data, 'checkout_enabled': shop.stripe_ready(), 'mode': shop.stripe_mode()})
+        if url.path == '/api/reviews':
+            return self.reply(200, shop.google_reviews())
         if url.path == '/api/order':
             sid = parse_qs(url.query).get('session_id', [''])[0]
             if not re.fullmatch(r'cs_[A-Za-z0-9_]{10,300}', sid):
@@ -215,6 +217,7 @@ if __name__ == '__main__':
                         'test': 'TEST mode — use Stripe test cards, no real money',
                         'live': 'LIVE mode — real payments',
                         'blocked-live': 'live key found but DOCNOVA_STRIPE_LIVE=1 is not set — checkout disabled'}[mode], flush=True)
+    print('Google reviews: ' + ('live from Google (refreshed hourly)' if os.getenv('GOOGLE_PLACES_API_KEY') else 'not connected — showing links to your Google reviews (add GOOGLE_PLACES_API_KEY to .env)'), flush=True)
     if mode in ('test', 'live') and not os.getenv('STRIPE_WEBHOOK_SECRET'):
         print('No webhook secret set — checking Stripe every 30 seconds for new payments instead (fine for testing; set up the webhook before going live).', flush=True)
         poll_pending_orders()
