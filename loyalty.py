@@ -100,14 +100,30 @@ def join(email, referrer='', ref_code=''):
     send_link(email, welcome=new_joiner)
     return True
 
-def send_link(email, welcome=False):
-    email = norm(email)
-    if not email or not member(email):
-        return False
+def new_token(email):
+    """A private card link token, valid for LINK_DAYS."""
     token = secrets.token_urlsafe(24)
     with shop.db() as conn:
         conn.execute('DELETE FROM rounds_tokens WHERE expires_at < ?', (int(time.time()),))
         conn.execute('INSERT INTO rounds_tokens VALUES (?,?,?)', (token, email, int(time.time()) + LINK_DAYS * 86400))
+    return token
+
+def enrol_subscriber(email):
+    """Newsletter sign-ups join Rounds automatically (joining bonus granted once, never twice).
+    Returns what the welcome email needs; no separate email is sent."""
+    email = norm(email)
+    if not email:
+        return None
+    m = ensure_member(email, joined=True)
+    base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
+    return {'balance': fmt(balance(email)), 'card': base + '/#/rounds?t=' + new_token(email),
+            'share': base + '/#/rounds?ref=' + m['ref_code']}
+
+def send_link(email, welcome=False):
+    email = norm(email)
+    if not email or not member(email):
+        return False
+    token = new_token(email)
     if not shop.smtp_configured():
         return False
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')

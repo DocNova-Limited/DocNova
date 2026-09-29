@@ -15,12 +15,26 @@ def configured():
 def deliver(email, token):
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
     link = base + '/unsubscribe?token=' + token
+    try:
+        r = loyalty.enrol_subscriber(email)
+    except Exception as e:
+        shop.log_email_error('rounds enrol', e)
+        r = None
+    r = r or {'balance': '1', 'card': base + '/#/rounds', 'share': base + '/#/rounds'}
     template = (ROOT / 'email' / 'welcome.html').read_text()
-    shop.send_mail(email, 'Welcome to DocNova — your first shift is on us (10% off inside)',
+    html = (template.replace('{{SHOP_URL}}', base).replace('{{UNSUBSCRIBE_URL}}', link)
+            .replace('{{ROUNDS_BALANCE}}', r['balance']).replace('{{ROUNDS_CARD_URL}}', r['card'])
+            .replace('{{ROUNDS_SHARE_URL}}', r['share']))
+    shop.send_mail(email, 'Welcome to DocNova — 10% off + your first DocNova Round is on us',
                    'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code FIRSTSHIFT10 at checkout '
-                   '(products only, delivery excluded; one discount code per order).\n\nShop the collection: ' + base + '\n\n'
+                   '(products only, delivery excluded; one discount code per order).\n\n'
+                   'You are also now a DocNova Rounds member, and your first round is already on your card: ' + r['balance'] + ' of 10 rounds. '
+                   'Every scrub set earns 1 round, every top or pair of trousers ½ round. Complete 10 rounds and your next scrub set is on us.\n'
+                   'View your Rounds card: ' + r['card'] + '\n(This private link works for 7 days; you can request a new one any time at ' + base + '/#/rounds)\n\n'
+                   'Refer a colleague: share ' + r['share'] + ' and earn a bonus round when they place their first order.\n\n'
+                   'Shop the collection: ' + base + '\n\n'
                    'DocNova Ltd · Registered in England & Wales No. 16502835 · Cambridge, UK\nUnsubscribe: ' + link,
-                   template.replace('{{SHOP_URL}}', base).replace('{{UNSUBSCRIBE_URL}}', link))
+                   html)
 
 def limited(ip, bucket, per_minute):
     now = int(time.time())
