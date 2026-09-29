@@ -16,7 +16,7 @@ STRIPE_API_VERSION = '2026-08-26.dahlia'
 INTEGRATION_ID = 'docnova-storefront-checkout-qmvhtrkw'
 SIZES = ('S', 'M', 'L', 'XL', '2XL')
 MAX_QTY_PER_LINE, MAX_LINES = 20, 30
-FREE_UK_DELIVERY_FROM_PENCE = 10000
+FREE_UK_DELIVERY_FROM_PENCE = 7000  # free UK delivery at £70+, after any discount
 # How the customer receives the order. The browser only sends the key; prices are decided here.
 DELIVERY = {
     'uk': {'label': 'UK delivery', 'pence': 495, 'free_from': FREE_UK_DELIVERY_FROM_PENCE, 'countries': ['GB'], 'days': (3, 5)},
@@ -156,7 +156,7 @@ def price_cart(raw_items, coupon='', delivery='uk'):
     method = delivery if delivery in DELIVERY else None
     if not method:
         raise ValueError('Please choose a delivery option.')
-    shipping = delivery_price(method, subtotal)  # the free-delivery threshold uses the pre-discount subtotal, as on the site
+    shipping = delivery_price(method, subtotal - discount)  # free-delivery threshold applies to the amount after any discount, as on the site
     return {'lines': lines, 'subtotal': subtotal, 'discount': discount, 'shipping': shipping,
             'total': subtotal - discount + shipping, 'coupon': code, 'delivery': method}
 
