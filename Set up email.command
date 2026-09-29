@@ -6,11 +6,11 @@ PY='/Users/drusmanmacbookpro/.cache/codex-runtimes/codex-primary-runtime/depende
 [ -x "$PY" ] || PY=python3
 echo "DocNova email setup"
 echo "-------------------"
-read -r -p "Email address to send from [info@docnova.co.uk]: " FROM
-FROM=${FROM:-info@docnova.co.uk}
-read -r -p "Mail server [mail.docnova.co.uk]: " HOST
-HOST=${HOST:-mail.docnova.co.uk}
-echo "Type the password for $FROM (nothing will appear as you type), then press Return:"
+FROM=info@docnova.co.uk
+HOST=mail.docnova.co.uk
+echo "Please type the password for info@docnova.co.uk"
+echo "(the letters will NOT appear on screen - that is normal)"
+echo "then press the Enter key on your keyboard (the big key on the right, may be marked return or ⏎):"
 read -r -s PASS
 echo
 "$PY" - "$FROM" "$HOST" "$PASS" <<'PYEOF'
@@ -48,4 +48,4 @@ if [ $? -eq 0 ]; then
   echo "Done. Restarting the website so it starts sending emails…"
   open "Start DocNova.command"
 fi
-read -r -p "Press Return to close this window." _
+read -r -p "All done. You can close this window." _
