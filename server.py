@@ -31,6 +31,20 @@ def limited(ip, bucket, per_minute):
     RATE[key] = recent + [now]
     return False
 
+class _Slice:
+    """File wrapper that stops after `left` bytes (used for byte-range video responses)."""
+    def __init__(self, f, left):
+        self.f, self.left = f, left
+    def read(self, n=-1):
+        if self.left <= 0:
+            return b''
+        n = self.left if n is None or n < 0 else min(n, self.left)
+        data = self.f.read(n)
+        self.left -= len(data)
+        return data
+    def close(self):
+        self.f.close()
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / 'dist'), **kwargs)
@@ -64,6 +78,31 @@ class Handler(SimpleHTTPRequestHandler):
         if length < 1 or length > limit:
             raise ValueError('size')
         return self.rfile.read(length)
+
+    def send_head(self):
+        # Byte-range support for the home film: Safari (Mac and iPhone) only plays video from servers that allow it.
+        rng = self.headers.get('Range', '')
+        m = re.fullmatch(r'bytes=(\d*)-(\d*)', rng.strip())
+        path = self.translate_path(urlsplit(self.path).path)
+        if not m or not os.path.isfile(path) or not path.endswith(('.mp4', '.webm')):
+            return super().send_head()
+        size = os.path.getsize(path)
+        start = int(m[1]) if m[1] else max(0, size - int(m[2] or 0))
+        end = min(int(m[2]), size - 1) if m[1] and m[2] else size - 1
+        if start >= size or start > end:
+            self.send_response(416)
+            self.send_header('Content-Range', 'bytes */%d' % size)
+            self.end_headers()
+            return None
+        f = open(path, 'rb')
+        f.seek(start)
+        self.send_response(206)
+        self.send_header('Content-Type', self.guess_type(path))
+        self.send_header('Accept-Ranges', 'bytes')
+        self.send_header('Content-Range', 'bytes %d-%d/%d' % (start, end, size))
+        self.send_header('Content-Length', str(end - start + 1))
+        self.end_headers()
+        return _Slice(f, end - start + 1)
 
     # ------------------------------------------------------------------ GET
     def do_GET(self):
