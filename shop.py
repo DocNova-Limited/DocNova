@@ -399,6 +399,8 @@ def sync_from_session(session, event_type=None):
         send_order_email(order, 'confirmation')
     return order
 
+_email_retry = {}
+
 def refresh_order_from_stripe(order):
     """Used by the confirmation page when the webhook has not arrived yet."""
     if order and order['status'] in ('awaiting_payment', 'processing') and order['checkout_session_id'] and stripe_ready():
@@ -407,8 +409,10 @@ def refresh_order_from_stripe(order):
             return sync_from_session(session) or order
         except StripeError:
             pass
-    if order and order['status'] == 'paid' and not order['confirmation_sent']:
-        send_order_email(order, 'confirmation')  # retry a confirmation that could not be sent earlier
+    if order and order['status'] == 'paid' and not order['confirmation_sent'] \
+            and time.time() - _email_retry.get(order['order_number'], 0) > 600:
+        _email_retry[order['order_number']] = time.time()  # at most one retry every 10 minutes per order
+        send_order_email(order, 'confirmation')
     return order
 
 def handle_refund(charge):
