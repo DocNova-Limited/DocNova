@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>DocNova Admin</title>
+<style>
+:root{--navy:#182130;--ink:#101826;--gold:#d9b97f;--blue:#004c9b;--bg:#f3f1ec;--card:#fff;--line:#e4e0d8;--muted:#6b7280;--ok:#1d7a46;--warn:#9a5b00;--bad:#b42318}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--navy);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+header{background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header b{font:600 12px/1 Arial;letter-spacing:.2em;color:var(--gold)}
+header .sp{flex:1}
+button,.btn{font:600 14px/1 inherit;border:0;background:var(--navy);color:#fff;padding:11px 16px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block}
+button.gold{background:var(--gold);color:var(--ink)}
+button.ghost,.btn.ghost{background:transparent;color:inherit;border:1px solid currentColor}
+button:disabled{opacity:.5;cursor:wait}
+input,textarea,select{font:inherit;padding:10px 12px;border:1px solid #cfd5de;border-radius:8px;background:#fff;color:var(--navy);width:100%}
+label{font-size:13px;color:var(--muted);display:block;margin:10px 0 4px}
+main{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stat small{display:block;color:var(--muted);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.stat strong{font-size:26px}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.tools input{max-width:320px}
+.tools select{max-width:230px}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:860px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #eee9e0;white-space:nowrap}
+th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;background:#faf8f4}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#f7f5f0}
+.num{text-align:right}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+.pill.ok{background:#e5f3ea;color:var(--ok)}.pill.no{background:#f1f1f1;color:#666}.pill.gold{background:#f6ecd8;color:#7a5a16}.pill.bad{background:#fde8e6;color:var(--bad)}
+.bar{height:8px;background:#ece8df;border-radius:6px;overflow:hidden;min-width:90px}
+.bar i{display:block;height:100%;background:var(--gold)}
+#login{max-width:380px;margin:12vh auto}
+#detail{position:fixed;inset:0;background:rgba(16,24,38,.45);display:none;justify-content:flex-end;z-index:5}
+#detail.open{display:flex}
+#panel{background:var(--bg);width:min(620px,100%);height:100%;overflow:auto;padding:0 0 40px}
+#panel .top{background:var(--navy);color:#fff;padding:18px 20px;position:sticky;top:0;display:flex;gap:10px;align-items:flex-start}
+#panel .top h2{margin:0;font:400 22px/1.25 Georgia,serif;word-break:break-all}
+#panel section{margin:14px 16px}
+#panel h3{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}
+.rcard{background:var(--ink);color:#fff;border-radius:14px;padding:18px}
+.rcard .stamps{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin:12px 0}
+.rcard .stamps span{aspect-ratio:1;border:1.5px solid var(--gold);border-radius:50%;display:block}
+.rcard .stamps span.f{background:var(--gold)}.rcard .stamps span.h{background:linear-gradient(90deg,var(--gold) 50%,transparent 50%)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.list{margin:0;padding:0;list-style:none}
+.list li{padding:9px 0;border-bottom:1px solid #eee9e0;display:flex;gap:10px;justify-content:space-between}
+.list li:last-child{border:0}
+.muted{color:var(--muted);font-size:13px}
+.msg{margin-top:10px;font-size:14px}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.check{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:14px;color:var(--navy)}
+.check input{width:auto;margin-top:3px}
+.help{background:#fff8e8;border:1px solid #f0dfb5;border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:14px}
+@media(max-width:600px){.grid3{grid-template-columns:1fr 1fr}.stat strong{font-size:22px}}
+</style>
+</head>
+<body>
+<header><b>DOCNOVA</b><span>Owner dashboard</span><span class="sp"></span><span id="who"></span></header>
+
+<div id="login" class="card" hidden>
+  <h2 style="margin:0 0 6px;font:400 24px Georgia,serif">Sign in</h2>
+  <p class="muted" style="margin:0 0 8px">Private area for the DocNova team.</p>
+  <form id="loginForm"><label for="pw">Admin password</label><input id="pw" type="password" autocomplete="current-password" required>
+  <p style="margin:14px 0 0"><button type="submit">Sign in</button></p><p id="loginMsg" class="msg bad"></p></form>
+</div>
+
+<main id="app" hidden>
+  <div class="stats" id="stats"></div>
+  <div class="help"><strong>Giving rounds for earlier purchases:</strong> click a person (or <em>Add a customer</em> for someone not listed), enter what they bought before, and press <em>Add rounds</em>. At 10 rounds their free-set code is emailed automatically.</div>
+  <div class="tools">
+    <input id="q" type="search" placeholder="Search email or name">
+    <select id="filter">
+      <option value="all">Everyone</option>
+      <option value="customers">Customers (paid orders)</option>
+      <option value="subscribers">Newsletter subscribers</option>
+      <option value="members">DocNova Rounds members</option>
+      <option value="close">Close to a free set (7+ rounds)</option>
+      <option value="rewards">Has an unused free-set code</option>
+    </select>
+    <button class="gold" id="addBtn" type="button">+ Add a customer</button>
+    <a class="btn ghost" href="/admin/api/export.csv" style="color:var(--navy)">Download CSV</a>
+    <button class="ghost" id="refresh" type="button" style="color:var(--navy)">Refresh</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Email</th><th>Name</th><th>Newsletter</th><th>Rounds</th><th class="num">Orders</th><th class="num">Sets</th><th class="num">Tops</th><th class="num">Trousers</th><th class="num">Spent</th><th>Card</th><th>Free set</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <p class="muted" id="count"></p>
+</main>
+
+<div id="detail"><div id="panel"></div></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v); }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k)); return e; };
+const gbp = p => '£' + (p / 100).toFixed(2);
+const day = t => t ? new Date(t * 1000).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : '—';
+const SUB = {sent: ['Subscribed', 'ok'], pending: ['Subscribed', 'ok'], sending: ['Subscribed', 'ok'], failed: ['Subscribed', 'ok'], unsubscribed: ['Unsubscribed', 'bad']};
+let PEOPLE = [];
+
+async function api(path, body) {
+  const r = await fetch('/admin/api/' + path, body ? {method: 'POST', headers: {'Content-Type': 'application/json', 'X-DocNova-Admin': '1'}, body: JSON.stringify(body)} : {headers: {'X-DocNova-Admin': '1'}});
+  if (r.status === 401) { showLogin(); throw new Error('Please sign in again.'); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.message || 'Something went wrong.');
+  return data;
+}
+function showLogin() { $('#app').hidden = true; $('#login').hidden = false; $('#who').textContent = ''; $('#detail').classList.remove('open'); }
+
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault(); $('#loginMsg').textContent = '';
+  const r = await fetch('/admin/login', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-DocNova-Admin': '1'}, body: JSON.stringify({password: $('#pw').value})});
+  $('#pw').value = '';
+  if (r.ok) return load();
+  const d = await r.json().catch(() => ({})); $('#loginMsg').textContent = d.message || 'Wrong password.';
+});
+
+async function load() {
+  try { const d = await api('people'); PEOPLE = d.people; } catch (e) { return; }
+  $('#login').hidden = true; $('#app').hidden = false;
+  $('#who').replaceChildren(el('button', {class: 'ghost', type: 'button', onclick: async () => { await fetch('/admin/logout', {method: 'POST', headers: {'X-DocNova-Admin': '1'}}); showLogin(); }}, 'Sign out'));
+  const cust = PEOPLE.filter(p => p.orders), subs = PEOPLE.filter(p => p.subscriber && p.subscriber !== 'unsubscribed');
+  $('#stats').replaceChildren(
+    stat('People', PEOPLE.length), stat('Customers', cust.length), stat('Subscribers', subs.length),
+    stat('Rounds members', PEOPLE.filter(p => p.member).length), stat('Sales (paid)', gbp(cust.reduce((a, p) => a + p.spent_pence, 0))),
+    stat('Free sets unused', PEOPLE.reduce((a, p) => a + p.rewards_unused, 0)));
+  render();
+}
+const stat = (k, v) => el('div', {class: 'stat'}, el('small', {}, k), el('strong', {}, v));
+
+function render() {
+  const q = $('#q').value.trim().toLowerCase(), f = $('#filter').value;
+  const list = PEOPLE.filter(p => (!q || p.email.includes(q) || (p.name || '').toLowerCase().includes(q)) && (
+    f === 'all' || (f === 'customers' && p.orders) || (f === 'subscribers' && p.subscriber && p.subscriber !== 'unsubscribed') ||
+    (f === 'members' && p.member) || (f === 'close' && p.halves >= 14) || (f === 'rewards' && p.rewards_unused)));
+  $('#rows').replaceChildren(...list.map(p => {
+    const s = SUB[p.subscriber];
+    return el('tr', {onclick: () => open(p.email)},
+      el('td', {}, p.email), el('td', {}, p.name || '—'),
+      el('td', {}, s ? el('span', {class: 'pill ' + s[1]}, s[0]) : el('span', {class: 'pill no'}, 'No')),
+      el('td', {}, el('div', {style: 'display:flex;gap:8px;align-items:center'}, el('div', {class: 'bar'}, el('i', {style: 'width:' + Math.min(100, p.halves * 5) + '%'})), p.rounds + ' / 10')),
+      el('td', {class: 'num'}, p.orders), el('td', {class: 'num'}, p.sets), el('td', {class: 'num'}, p.tops), el('td', {class: 'num'}, p.trousers),
+      el('td', {class: 'num'}, gbp(p.spent_pence)),
+      el('td', {}, p.member ? el('span', {class: 'pill ok'}, 'Member') : el('span', {class: 'pill no'}, 'Not joined')),
+      el('td', {}, p.rewards_unused ? el('span', {class: 'pill gold'}, p.rewards_unused + ' ready') : (p.halves >= 20 ? 'Due' : p.to_go + ' to go')));
+  }));
+  $('#count').textContent = list.length + ' of ' + PEOPLE.length + ' people shown';
+}
+$('#q').addEventListener('input', render); $('#filter').addEventListener('change', render); $('#refresh').addEventListener('click', load);
+$('#addBtn').addEventListener('click', () => {
+  const email = prompt('Customer email address:'); if (email && email.includes('@')) open(email.trim().toLowerCase());
+});
+$('#detail').addEventListener('click', e => { if (e.target.id === 'detail') close(); });
+function close() { $('#detail').classList.remove('open'); }
+
+async function open(email) {
+  let d; try { d = await api('person?email=' + encodeURIComponent(email)); } catch (e) { return alert(e.message); }
+  const s = d.summary || {email, halves: 0, rounds: '0', to_go: '10', orders: 0, sets: 0, tops: 0, trousers: 0, member: false};
+  const filled = Math.min(s.halves, 20);
+  const stamps = Array.from({length: 10}, (_, i) => el('span', {class: filled >= (i + 1) * 2 ? 'f' : filled === i * 2 + 1 ? 'h' : ''}));
+
+  const sets = el('input', {type: 'number', min: 0, step: 1, value: 0, inputmode: 'numeric'});
+  const tops = el('input', {type: 'number', min: 0, step: 1, value: 0, inputmode: 'numeric'});
+  const trs = el('input', {type: 'number', min: 0, step: 1, value: 0, inputmode: 'numeric'});
+  const rounds = el('input', {type: 'number', step: 0.5, value: 0});
+  const reason = el('input', {type: 'text', maxlength: 80, value: 'Purchases before DocNova Rounds'});
+  const joining = el('input', {type: 'checkbox', checked: !s.member});
+  const notify = el('input', {type: 'checkbox', checked: true});
+  const msg = el('p', {class: 'msg'});
+  const calc = () => { rounds.value = (+sets.value || 0) + ((+tops.value || 0) + (+trs.value || 0)) / 2; };
+  [sets, tops, trs].forEach(i => i.addEventListener('input', calc));
+  const save = el('button', {class: 'gold', type: 'button', onclick: async () => {
+    const n = +rounds.value || 0;
+    if (!n && !joining.checked) { msg.className = 'msg bad'; msg.textContent = 'Enter what they bought (or a number of rounds) first.'; return; }
+    if (!confirm((n ? (n > 0 ? 'Add ' : 'Remove ') + Math.abs(n) + ' round(s)' : 'Give the joining bonus') + ' for ' + email + '?')) return;
+    save.disabled = true;
+    try {
+      const r = await api('adjust', {email, rounds: n, reason: reason.value, joining: joining.checked, notify: notify.checked});
+      await load(); await open(email);
+      const m2 = $('#panel .msg'); if (m2) { m2.className = 'msg ok';
+        m2.textContent = 'Saved. Card now ' + r.balance + ' rounds.' + (r.rewards_sent.length ? ' Free-set code emailed: ' + r.rewards_sent.join(', ') + '.' : '') + (r.card_emailed ? ' Card link emailed to the customer.' : ''); }
+    } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; save.disabled = false; }
+  }}, 'Add rounds');
+
+  const nm = el('input', {type: 'text', maxlength: 80, value: d.name || (s.name || ''), placeholder: 'e.g. Dr Sarah Khan'});
+  const note = el('textarea', {rows: 3, maxlength: 1000, placeholder: 'e.g. Bought 2 navy sets at the hospital stall, Aug 2026'}); note.value = d.note || '';
+  const nmsg = el('p', {class: 'msg'});
+
+  $('#panel').replaceChildren(
+    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, s.name || d.name || 'Customer'), el('h2', {}, email)),
+      el('button', {class: 'ghost', type: 'button', onclick: close}, 'Close')),
+    el('section', {}, el('div', {class: 'rcard'},
+      el('div', {style: 'display:flex;justify-content:space-between;font:600 11px Arial;letter-spacing:.18em;color:#c9d0db'}, el('span', {}, 'DOCNOVA ROUNDS'), el('span', {}, s.rounds + ' OF 10')),
+      el('div', {class: 'stamps'}, stamps),
+      el('div', {style: 'font-size:14px;color:#c9d0db'}, s.halves >= 20 ? 'Free set due — it is issued automatically.' : s.to_go + ' rounds to go until a free scrub set.',
+        s.member ? '' : ' · Not joined yet'))),
+    el('section', {class: 'card'}, el('h3', {}, 'Add rounds for earlier purchases'),
+      el('p', {class: 'muted', style: 'margin:0'}, 'Enter what they bought before. 1 set = 1 round · 1 top or trousers = ½ round.'),
+      el('div', {class: 'grid3'}, el('div', {}, el('label', {}, 'Scrub sets'), sets), el('div', {}, el('label', {}, 'Tops'), tops), el('div', {}, el('label', {}, 'Trousers'), trs)),
+      el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Rounds to add (use minus to remove)'), rounds), el('div', {}, el('label', {}, 'Reason (customer sees this)'), reason)),
+      el('label', {class: 'check'}, joining, el('span', {}, 'Also give the 1-round joining bonus (only once per person)')),
+      el('label', {class: 'check'}, notify, el('span', {}, 'Email them their updated Rounds card')),
+      el('p', {style: 'margin:14px 0 0'}, save), msg),
+    el('section', {class: 'card'}, el('h3', {}, 'Summary'),
+      el('ul', {class: 'list'},
+        li('Paid website orders', s.orders), li('Scrub sets / tops / trousers', s.sets + ' / ' + s.tops + ' / ' + s.trousers),
+        li('Spent on website', gbp(s.spent_pence || 0)), li('Newsletter', s.subscriber ? (SUB[s.subscriber] || [s.subscriber])[0] : 'No'),
+        li('Joined Rounds', s.member ? day(s.joined_at) : 'Not yet'), li('Referral code', d.ref_code || '—'),
+        li('Referred by', d.referred_by || '—'), li('Colleagues they referred', d.referred.length ? d.referred.join(', ') : 'None'))),
+    el('section', {class: 'card'}, el('h3', {}, 'Free-set codes'),
+      d.rewards.length ? el('ul', {class: 'list'}, d.rewards.map(r => li(r.code, r.redeemed_order ? 'Used on ' + r.redeemed_order : (r.expires_at * 1000 < Date.now() ? 'Expired' : 'Unused · expires ' + day(r.expires_at)))))
+        : el('p', {class: 'muted', style: 'margin:0'}, 'None yet.')),
+    el('section', {class: 'card'}, el('h3', {}, 'Rounds history'),
+      d.history.length ? el('ul', {class: 'list'}, d.history.map(h => li(day(h.at) + ' · ' + h.what, (h.halves > 0 ? '+' : '') + h.rounds)))
+        : el('p', {class: 'muted', style: 'margin:0'}, 'No rounds yet.')),
+    el('section', {class: 'card'}, el('h3', {}, 'Website orders'),
+      d.orders.length ? el('ul', {class: 'list'}, d.orders.map(o => el('li', {}, el('div', {}, el('strong', {}, o.number), el('div', {class: 'muted'}, day(o.paid_at) + ' · ' + o.status + (o.coupon ? ' · code ' + o.coupon : '')), el('div', {class: 'muted'}, o.items.join(', '))), el('strong', {}, gbp(o.total_pence)))))
+        : el('p', {class: 'muted', style: 'margin:0'}, 'No website orders yet.')),
+    el('section', {class: 'card'}, el('h3', {}, 'Private notes (only you see these)'),
+      el('label', {}, 'Name'), nm, el('label', {}, 'Notes'), note,
+      el('p', {style: 'margin:12px 0 0'}, el('button', {type: 'button', onclick: async () => {
+        try { await api('note', {email, name: nm.value, note: note.value}); nmsg.className = 'msg ok'; nmsg.textContent = 'Saved.'; load(); }
+        catch (e) { nmsg.className = 'msg bad'; nmsg.textContent = e.message; } }}, 'Save notes')), nmsg));
+  $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
+}
+const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
+load();
+</script>
+</body>
+</html>
