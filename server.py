@@ -306,7 +306,10 @@ def poll_pending_orders():
     threading.Thread(target=loop, daemon=True).start()
 
 if __name__ == '__main__':
-    host, port = os.getenv('DOCNOVA_HOST', '127.0.0.1'), int(os.getenv('DOCNOVA_PORT', '4173'))
+    if os.getenv('PORT'):   # hosting platforms such as Render tell the app which port to use
+        host, port = os.getenv('DOCNOVA_HOST', '0.0.0.0'), int(os.environ['PORT'])
+    else:
+        host, port = os.getenv('DOCNOVA_HOST', '127.0.0.1'), int(os.getenv('DOCNOVA_PORT', '4173'))
     print('DocNova preview: http://%s:%d/' % (host, port), flush=True)
     print('Email mode: ' + ('SMTP enabled' if configured() else 'local pending signups — email sending not configured'), flush=True)
     if configured():

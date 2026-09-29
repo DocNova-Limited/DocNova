@@ -10,7 +10,9 @@ import hashlib, hmac, json, os, re, secrets, smtplib, sqlite3, ssl, threading, t
 import http.client, urllib.error, urllib.request
 
 ROOT = Path(__file__).resolve().parent
-DB = ROOT / 'private' / 'subscriptions.sqlite3'
+# Private data (orders, subscribers, Rounds). On the live server this points at a persistent disk via DOCNOVA_DATA_DIR.
+DATA = Path(os.environ.get('DOCNOVA_DATA_DIR') or ROOT / 'private')
+DB = DATA / 'subscriptions.sqlite3'
 STRIPE_API_VERSION = '2026-08-26.dahlia'
 # Tags every Checkout Session so this flow can be found and compared in the Stripe Dashboard.
 INTEGRATION_ID = 'docnova-storefront-checkout-qmvhtrkw'
@@ -173,7 +175,7 @@ def price_cart(raw_items, coupon='', delivery='uk'):
 _lock = threading.RLock()
 
 def db():
-    DB.parent.mkdir(exist_ok=True, mode=0o700)
+    DB.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     conn = sqlite3.connect(DB, timeout=10)
     conn.row_factory = sqlite3.Row
     return conn
@@ -536,7 +538,7 @@ def money(pence):
 def log_email_error(what, err):
     """Keep a short private note of email failures (private/email-errors.log) so they can be diagnosed."""
     try:
-        with open(ROOT / 'private' / 'email-errors.log', 'a') as f:
+        with open(DATA / 'email-errors.log', 'a') as f:
             f.write('%s  %s: %s: %s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), what, err.__class__.__name__, str(err)[:200]))
     except OSError:
         pass

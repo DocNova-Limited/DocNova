@@ -1,0 +1,44 @@
+# Render blueprint for docnova.co.uk (web service + a small private disk for orders, subscribers and Rounds)
+services:
+  - type: web
+    name: docnova
+    runtime: python
+    region: frankfurt
+    plan: starter
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 server.py
+    healthCheckPath: /
+    autoDeploy: true
+    disk:
+      name: docnova-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DOCNOVA_DATA_DIR
+        value: /var/data
+      - key: DOCNOVA_PUBLIC_URL
+        value: https://docnova.co.uk
+      - key: GOOGLE_PLACE_ID
+        value: ChIJsYc-YLZng2URQNsyBvUhTec
+      # Private values — entered in the Render dashboard, never stored in GitHub:
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: DOCNOVA_STRIPE_LIVE
+        sync: false
+      - key: DOCNOVA_PRIVATE_CODES
+        sync: false
+      - key: DOCNOVA_SMTP_HOST
+        sync: false
+      - key: DOCNOVA_SMTP_PORT
+        sync: false
+      - key: DOCNOVA_SMTP_USER
+        sync: false
+      - key: DOCNOVA_SMTP_PASSWORD
+        sync: false
+      - key: DOCNOVA_FROM_EMAIL
+        sync: false
