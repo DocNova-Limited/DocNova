@@ -565,17 +565,36 @@ def send_order_email(order, kind):
                 % (order['order_number'], items, method, money(order['shipping'] or 0), money(order['total']),
                    'Click & Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
                    if collect else 'We will email you again with a tracking number as soon as it is dispatched.', track))
-        import loyalty
+        import loyalty, invoices
+        from html import escape
         line = loyalty.progress_line(order['email'])
+        card = ''
         if line:
-            text += '\n' + line + '\nSee your card: ' + base + '/#/rounds\n'
+            try:
+                card = base + '/#/rounds?t=' + loyalty.new_token(loyalty.norm(order['email']))
+            except Exception:
+                card = base + '/#/rounds'
+            text += '\n' + line + '\nSee your card: ' + card + '\n'
+        rows = ''.join('<tr><td style="padding:8px 0;border-bottom:1px solid #eee9e0">%d × %s%s</td><td align="right" style="padding:8px 0;border-bottom:1px solid #eee9e0">%s</td></tr>'
+                       % (l['qty'], escape(l['name']), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % escape(l['size']),
+                          money(l['unit_pence'] * l['qty'])) for l in json.loads(order['items_json']))
+        lead = ('<p style="margin:0 0 14px">Thank you for your order. Your order number is <strong style="color:#182130">%s</strong>.</p>'
+                '<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130">%s'
+                '<tr><td style="padding:8px 0">%s</td><td align="right" style="padding:8px 0">%s</td></tr>'
+                '<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td align="right" style="padding:8px 0;font-weight:700">%s</td></tr></table>'
+                '<p style="margin:14px 0">%s</p>%s' % (
+                    escape(order['order_number']), rows, escape(method), money(order['shipping'] or 0), money(order['total']),
+                    'Click &amp; Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
+                    if collect else 'We will email you again with a tracking number as soon as it is dispatched.',
+                    ('<p style="margin:18px 0 12px;color:#182130;font-weight:600">%s</p>%s' % (escape(line), loyalty.card_img(loyalty.balance(loyalty.norm(order['email'])), card))) if line else ''))
+        html_body = invoices._email_html(None, base, 'Your order is confirmed', lead, 'Track your order', track)
     else:
         subject = 'Your DocNova order ' + order['order_number'] + ' is on its way'
         text = ('Good news: your order has been dispatched.\n\nOrder number: %s\nCarrier: %s\nTracking number: %s\n%s\n'
                 'Track your order: %s\n' % (order['order_number'], order['carrier'] or '-', order['tracking_number'] or '-',
                                             ('Carrier tracking: ' + order['tracking_url'] + '\n') if order['tracking_url'] else '', track))
     try:
-        send_mail(order['email'], subject, text)
+        send_mail(order['email'], subject, text, html_body if kind == 'confirmation' else None)
     except Exception as e:
         log_email_error('%s email for %s' % (kind, order['order_number']), e)
         return False
