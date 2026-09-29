@@ -3,7 +3,7 @@
   python3 orders.py list                     recent orders (add --all to include unpaid/abandoned)
   python3 orders.py show DN-260926-7K4QP     full order with delivery address
   python3 orders.py ship DN-260926-7K4QP --carrier "Royal Mail" --tracking AB123456789GB [--url https://...]
-  python3 orders.py delivered DN-260926-7K4QP
+  python3 orders.py delivered DN-260926-7K4QP   (also marks a Click & Collect order as collected)
   python3 orders.py cancel DN-260926-7K4QP   (refund the payment in the Stripe Dashboard first)
 
 Customers see every change straight away on the website's "Track your order" page.
@@ -39,6 +39,9 @@ def cmd_show(args):
     print('Status    ', shop.STATUS_LABELS.get(o['status'], o['status']))
     print('Placed    ', when(o['created_at']), '   Paid:', when(o['paid_at']))
     print('Customer  ', o['customer_name'] or '-', '·', o['email'] or '-', '·', o['phone'] or '-')
+    method = o.get('delivery_method') or 'uk'
+    print('Delivery  ', shop.DELIVERY.get(method, shop.DELIVERY['uk'])['label'],
+          '— call the customer today to arrange collection, then: python3 orders.py delivered ' + o['order_number'] if method == 'collect' else '')
     if o['shipping_json']:
         a = (json.loads(o['shipping_json']).get('address') or {})
         print('Ship to   ', ', '.join(x for x in (a.get('line1'), a.get('line2'), a.get('city'), a.get('state'), a.get('postal_code'), a.get('country')) if x))
@@ -56,6 +59,8 @@ def cmd_show(args):
 
 def cmd_ship(args):
     o = find(args.order)
+    if o.get('delivery_method') == 'collect':
+        sys.exit('This is a Click & Collect order — use "delivered" once the customer has collected it.')
     if o['status'] not in ('paid', 'dispatched'):
         sys.exit('Order is "%s" — only paid orders can be dispatched.' % shop.STATUS_LABELS.get(o['status'], o['status']))
     url = args.url or shop.tracking_url_for(args.carrier, args.tracking)

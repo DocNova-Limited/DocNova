@@ -16,8 +16,26 @@ STRIPE_API_VERSION = '2026-08-26.dahlia'
 INTEGRATION_ID = 'docnova-storefront-checkout-qmvhtrkw'
 SIZES = ('S', 'M', 'L', 'XL', '2XL')
 MAX_QTY_PER_LINE, MAX_LINES = 20, 30
-DELIVERY_PENCE, FREE_DELIVERY_FROM_PENCE = 495, 10000
+FREE_UK_DELIVERY_FROM_PENCE = 10000
+# How the customer receives the order. The browser only sends the key; prices are decided here.
+DELIVERY = {
+    'uk': {'label': 'UK delivery', 'pence': 495, 'free_from': FREE_UK_DELIVERY_FROM_PENCE, 'countries': ['GB'], 'days': (3, 5)},
+    'ie': {'label': 'Republic of Ireland delivery', 'pence': 995, 'free_from': None, 'countries': ['IE'], 'days': (5, 8)},
+    'collect': {'label': 'Click & Collect (Cambridge area)', 'pence': 0, 'free_from': None, 'countries': None, 'days': None},
+}
+# Discount codes. WELCOME10 is the public welcome offer. Private codes (e.g. for Blue Light card holders) live
+# only in .env as DOCNOVA_PRIVATE_CODES="CODE:percent,CODE:percent", so they never appear in the website's code
+# or in Git. Codes are checked by the server; an order carries at most one code, and Stripe's own
+# promotion-code box is never switched on, so codes can't be combined.
 COUPONS = {'WELCOME10': {'stripe_id': 'docnova-welcome10', 'percent_off': 10, 'name': 'WELCOME10 · 10% off products'}}
+
+def load_private_codes():
+    for part in os.getenv('DOCNOVA_PRIVATE_CODES', '').split(','):
+        m = re.fullmatch(r'\s*([A-Za-z0-9]{3,20})\s*:\s*(\d{1,2})\s*', part)
+        if m and 0 < int(m.group(2)) < 100:
+            code = m.group(1).upper()
+            COUPONS[code] = {'stripe_id': 'docnova-' + code.lower(), 'percent_off': int(m.group(2)),
+                             'name': '%s · %s%% off products' % (code, m.group(2))}
 ORDER_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'  # no 0/O, 1/I/L: easy to read over the phone
 
 # ---------------------------------------------------------------- settings
@@ -34,6 +52,7 @@ def load_env_file():
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 load_env_file()
+load_private_codes()
 
 def stripe_key():
     return os.getenv('STRIPE_SECRET_KEY', '').strip()
@@ -99,7 +118,16 @@ def catalogue():
     _catalogue_cache.update(mtime=mtime, items=items)
     return items
 
-def price_cart(raw_items, coupon=''):
+def coupon_info(code):
+    code = str(code or '').strip().upper()
+    spec = COUPONS.get(code)
+    return {'code': code, 'percent_off': spec['percent_off']} if spec else None
+
+def delivery_price(method, subtotal):
+    d = DELIVERY[method]
+    return 0 if d['free_from'] is not None and subtotal >= d['free_from'] else d['pence']
+
+def price_cart(raw_items, coupon='', delivery='uk'):
     """Turn the browser's bag into trusted order lines. Only ids, sizes and quantities are taken from the browser."""
     if not isinstance(raw_items, list) or not raw_items or len(raw_items) > MAX_LINES:
         raise ValueError('Your bag is empty or too large.')
@@ -125,9 +153,12 @@ def price_cart(raw_items, coupon=''):
     code = str(coupon or '').strip().upper()
     code = code if code in COUPONS else ''
     discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100 if code else 0  # round half up, like the site
-    shipping = 0 if subtotal >= FREE_DELIVERY_FROM_PENCE else DELIVERY_PENCE  # threshold uses pre-discount subtotal, as on the site
+    method = delivery if delivery in DELIVERY else None
+    if not method:
+        raise ValueError('Please choose a delivery option.')
+    shipping = delivery_price(method, subtotal)  # the free-delivery threshold uses the pre-discount subtotal, as on the site
     return {'lines': lines, 'subtotal': subtotal, 'discount': discount, 'shipping': shipping,
-            'total': subtotal - discount + shipping, 'coupon': code}
+            'total': subtotal - discount + shipping, 'coupon': code, 'delivery': method}
 
 # ---------------------------------------------------------------- database
 _lock = threading.RLock()
@@ -152,6 +183,12 @@ def init_db():
         CREATE INDEX IF NOT EXISTS orders_payment_intent ON orders(payment_intent_id);
         CREATE TABLE IF NOT EXISTS stripe_events (id TEXT PRIMARY KEY, type TEXT, received_at INTEGER);
         ''')
+        cols = [r[1] for r in conn.execute('PRAGMA table_info(orders)')]
+        if 'delivery_method' not in cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN delivery_method TEXT DEFAULT 'uk'")
+        cols = [r[1] for r in conn.execute('PRAGMA table_info(subscribers)')]
+        if 'source' not in cols:
+            conn.execute("ALTER TABLE subscribers ADD COLUMN source TEXT DEFAULT 'website'")
     os.chmod(DB, 0o600)
 
 def new_order_number():
@@ -164,9 +201,9 @@ def create_order(priced):
             number = new_order_number()
             if not conn.execute('SELECT 1 FROM orders WHERE order_number=?', (number,)).fetchone():
                 break
-        conn.execute('INSERT INTO orders (order_number,status,created_at,updated_at,items_json,coupon,subtotal,discount,shipping,total) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        conn.execute('INSERT INTO orders (order_number,status,created_at,updated_at,items_json,coupon,subtotal,discount,shipping,total,delivery_method) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                      (number, 'awaiting_payment', now, now, json.dumps(priced['lines']), priced['coupon'],
-                      priced['subtotal'], priced['discount'], priced['shipping'], priced['total']))
+                      priced['subtotal'], priced['discount'], priced['shipping'], priced['total'], priced.get('delivery', 'uk')))
     return number
 
 def get_order(number=None, session_id=None, payment_intent=None):
@@ -199,13 +236,16 @@ def public_order(order):
     address = None
     if ship and ship.get('address'):
         a = ship['address']
-        address = ', '.join(x for x in (a.get('line1'), a.get('line2'), a.get('city'), a.get('postal_code')) if x)
+        address = ', '.join(x for x in (a.get('line1'), a.get('line2'), a.get('city'), a.get('postal_code'),
+                                        'Ireland' if a.get('country') == 'IE' else None) if x)
     return {'order_number': order['order_number'], 'status': order['status'], 'status_label': STATUS_LABELS.get(order['status'], order['status']),
             'created_at': order['created_at'], 'paid_at': order['paid_at'], 'dispatched_at': order['dispatched_at'], 'delivered_at': order['delivered_at'],
             'items': [{k: l[k] for k in ('name', 'size', 'qty', 'unit_pence')} for l in json.loads(order['items_json'])],
             'subtotal': order['subtotal'], 'discount': order['discount'], 'shipping': order['shipping'], 'total': order['total'],
             'coupon': order['coupon'], 'carrier': order['carrier'], 'tracking_number': order['tracking_number'],
-            'tracking_url': order['tracking_url'], 'ship_to': address, 'name': order['customer_name']}
+            'tracking_url': order['tracking_url'], 'ship_to': address, 'name': order['customer_name'],
+            'delivery_method': order.get('delivery_method') or 'uk',
+            'delivery_label': DELIVERY.get(order.get('delivery_method') or 'uk', DELIVERY['uk'])['label']}
 
 # ---------------------------------------------------------------- Stripe API (plain HTTPS, no SDK)
 class StripeError(Exception):
@@ -280,11 +320,6 @@ def create_checkout_session(order_number, priced, base_url):
                              'metadata': {'docnova_id': l['id'], 'size': l['size']}}}} for l in priced['lines']],
         # payment_method_types is deliberately omitted: Stripe shows every method switched on in the
         # Dashboard that suits this customer's device, country and basket (dynamic payment methods).
-        'shipping_address_collection': {'allowed_countries': ['GB']},
-        'shipping_options': [{'shipping_rate_data': {
-            'type': 'fixed_amount', 'display_name': 'Free UK delivery' if priced['shipping'] == 0 else 'Standard UK delivery',
-            'fixed_amount': {'amount': priced['shipping'], 'currency': 'gbp'},
-            'delivery_estimate': {'minimum': {'unit': 'business_day', 'value': 3}, 'maximum': {'unit': 'business_day', 'value': 5}}}}],
         'phone_number_collection': {'enabled': True},
         'client_reference_id': order_number,
         'metadata': {'order_number': order_number},
@@ -294,7 +329,20 @@ def create_checkout_session(order_number, priced, base_url):
         'cancel_url': base_url + '/#/checkout',
         'integration_identifier': INTEGRATION_ID,
     }
+    method = DELIVERY[priced.get('delivery', 'uk')]
+    if method['countries']:
+        # Delivery: Stripe asks for an address in the chosen country only, at the price fixed above.
+        lo, hi = method['days']
+        params['shipping_address_collection'] = {'allowed_countries': method['countries']}
+        params['shipping_options'] = [{'shipping_rate_data': {
+            'type': 'fixed_amount', 'display_name': ('Free ' if priced['shipping'] == 0 else '') + method['label'],
+            'fixed_amount': {'amount': priced['shipping'], 'currency': 'gbp'},
+            'delivery_estimate': {'minimum': {'unit': 'business_day', 'value': lo}, 'maximum': {'unit': 'business_day', 'value': hi}}}}]
+    else:
+        # Click & Collect: no address or delivery charge; the phone number lets the team arrange collection.
+        params['custom_text']['after_submit'] = {'message': 'Click & Collect: the DocNova team will contact you today to arrange collection in the Cambridge area.'}
     if priced['coupon']:
+        # Exactly one discount per order (allow_promotion_codes stays off, so no second code can be added at Stripe).
         params['discounts'] = [{'coupon': ensure_coupon(priced['coupon'])}]
     session = stripe_request('POST', '/v1/checkout/sessions', params, idempotency_key='checkout-' + order_number)
     fields = {'checkout_session_id': session['id'], 'livemode': int(bool(session.get('livemode')))}
@@ -457,9 +505,12 @@ def send_order_email(order, kind):
                                            money(l['unit_pence'] * l['qty'])) for l in json.loads(order['items_json']))
     if kind == 'confirmation':
         subject = 'Your DocNova order ' + order['order_number'] + ' is confirmed'
-        text = ('Thank you for your order.\n\nOrder number: %s\n\n%s\n\nDelivery: %s\nTotal paid: %s\n\n'
-                'We will email you again with a tracking number as soon as it is dispatched.\nTrack your order: %s\n'
-                % (order['order_number'], items, money(order['shipping'] or 0), money(order['total']), track))
+        collect = order.get('delivery_method') == 'collect'
+        method = DELIVERY.get(order.get('delivery_method') or 'uk', DELIVERY['uk'])['label']
+        text = ('Thank you for your order.\n\nOrder number: %s\n\n%s\n\n%s: %s\nTotal paid: %s\n\n%s\nTrack your order: %s\n'
+                % (order['order_number'], items, method, money(order['shipping'] or 0), money(order['total']),
+                   'Click & Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
+                   if collect else 'We will email you again with a tracking number as soon as it is dispatched.', track))
     else:
         subject = 'Your DocNova order ' + order['order_number'] + ' is on its way'
         text = ('Good news: your order has been dispatched.\n\nOrder number: %s\nCarrier: %s\nTracking number: %s\n%s\n'

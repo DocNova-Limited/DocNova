@@ -39,25 +39,41 @@ The `dist` folder can be served by static hosting for the shopping demo, but the
 ## Shopping experience
 
 - Homepage featuring scrubs and Essential Medical Devices, with a separate shop.
-- Men’s and women’s scrub tops, trousers and matching sets in the photographed colours.
-- S, M, L and XL sizing as confirmed by the owner.
-- Tops £44.99; trousers £49.99; sets £94.98 (top plus trousers).
+- Men’s scrubs in 5 colours and women’s in 7; every colour as a top (£44.99), trousers (£49.99) and set (£94.98).
+- Sizes S, M, L, XL and 2XL, with women’s and men’s size charts on the size guide and every product page.
 - Blood pressure monitor £44.99; infrared thermometer £34.99.
 - Category, colour, fit, price, size, collection and fabric controls, sorting and pagination.
 - Product image galleries, colour switching, quick view, wishlist, search and local cart.
-- “Complete the set” recommendations match garment colour and men’s/women’s fit, with independent sizes.
-- About, FAQ, size guide, support and policy pages.
-- Welcome subscription popup and WELCOME10 coupon: 10% off product subtotal, rounded to pennies, excluding delivery. Repeated application does not stack discounts.
+- About, FAQ, size guide, contact (email + WhatsApp) and policy pages. A WhatsApp chat button sits on every page.
+
+### Delivery options (chosen at checkout)
+
+| Option | Price | Stripe asks for |
+|---|---|---|
+| UK delivery | £4.95, free from £100 (before discount) | a UK address |
+| Republic of Ireland | £9.95 | an Irish address |
+| Click & Collect (Cambridge area) | free | phone number only — call the customer the same day |
+
+Prices are set in `shop.py` (`DELIVERY`); the website only sends which option was picked. `python3 orders.py show <order>` shows the option; mark a collected order with `python3 orders.py delivered <order>`.
+
+### Discount codes — one per order
+
+- **WELCOME10** — 10% off products, offered in the welcome popup and welcome email.
+- **Private codes** — not shown anywhere on the website. They are set only in the private `.env` file as
+  `DOCNOVA_PRIVATE_CODES="CODE:15,OTHERCODE:20"` (code and percentage), so they never appear in the site’s code or in Git.
+
+Codes never cover delivery and are checked by the server (`/api/coupon`). A new code replaces the previous one, and Stripe’s own promotion-code box stays off, so codes can’t be combined. Restart the website after changing `.env`.
 
 ## Email sending and subscriber data
 
-Without email configuration, subscriptions are saved locally with a pending status. The UI explicitly says no email was sent. Automatic real email delivery is **not active**.
+Every sign-up from the welcome popup or footer is saved in `private/subscriptions.sqlite3` (never committed to Git).
 
-To enable delivery, configure the server environment using the variable names in `email-settings.example`. Use the chosen email service’s verified sender and SMTP credentials. `DOCNOVA_PUBLIC_URL` must be the public website URL so email and unsubscribe links work for customers. Keep secrets out of `dist`, version control and shared archives.
+- `python3 subscribers.py list` — everyone who signed up and whether their welcome email went out.
+- `python3 subscribers.py export` — `subscribers.csv` of active subscribers for an email tool (keep it private).
 
-The server creates `private/subscriptions.sqlite3` automatically. This repository includes the full schema rather than a live customer database. The local database had zero customer records when this repository was prepared. Private databases and secrets are deliberately ignored by Git. Back up future customer records separately with appropriate access controls; never commit them to this public repository.
+**Welcome email:** when email sending is set up, each new subscriber automatically receives the branded welcome email (`email/welcome.html`) with WELCOME10 and an unsubscribe link. Sign-ups saved before email was set up are sent automatically (checked every 10 minutes) once it is.
 
-The welcome email includes an unsubscribe link. Its confirmation form marks the address unsubscribed. Any future marketing tool must honour that status. Pending signups are not automatically sent when SMTP is later configured; they must be deliberately processed or the customer can subscribe again. Browser preference resets do not delete server-side records.
+**To switch email on**, fill in the `DOCNOVA_SMTP_*`, `DOCNOVA_FROM_EMAIL` and `DOCNOVA_PUBLIC_URL` settings in `.env` using your email provider’s SMTP details (for example Google Workspace, Microsoft 365, Zoho or a sending service such as Brevo). `DOCNOVA_PUBLIC_URL` must be the live website address so links in emails work.
 
 ## Live Google reviews
 

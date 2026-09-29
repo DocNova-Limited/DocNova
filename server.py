@@ -16,9 +16,10 @@ def deliver(email, token):
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
     link = base + '/unsubscribe?token=' + token
     template = (ROOT / 'email' / 'welcome.html').read_text()
-    shop.send_mail(email, 'Welcome to DocNova — enjoy 10% off',
-                   'Welcome to DocNova!\n\nThank you for subscribing. Enjoy 10% off your products with code WELCOME10 at checkout. '
-                   'Delivery is excluded. One code per order.\n\nShop: ' + base + '\n\nManage your subscription: ' + link,
+    shop.send_mail(email, 'Welcome to DocNova — your 10% code is inside',
+                   'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code WELCOME10 at checkout '
+                   '(products only, delivery excluded; one discount code per order).\n\nShop the collection: ' + base + '\n\n'
+                   'DocNova Ltd · Registered in England & Wales No. 16502835 · Cambridge, UK\nUnsubscribe: ' + link,
                    template.replace('{{SHOP_URL}}', base).replace('{{UNSUBSCRIBE_URL}}', link))
 
 def limited(ip, bucket, per_minute):
@@ -94,7 +95,7 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/stripe/webhook':
             return self.stripe_webhook()
-        if path not in ('/api/subscribe', '/api/unsubscribe', '/api/checkout', '/api/track'):
+        if path not in ('/api/subscribe', '/api/unsubscribe', '/api/checkout', '/api/track', '/api/coupon'):
             return self.reply(404, {'message': 'Not found'})
         origin = self.headers.get('Origin')
         if origin and urlsplit(origin).netloc != self.headers.get('Host'):
@@ -105,6 +106,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.checkout(json.loads(raw))
             if path == '/api/track':
                 return self.track(json.loads(raw))
+            if path == '/api/coupon':
+                return self.coupon(json.loads(raw))
             if path == '/api/unsubscribe':
                 token = parse_qs(raw).get('token', [''])[0]
                 with sqlite3.connect(DB) as db:
@@ -122,7 +125,7 @@ class Handler(SimpleHTTPRequestHandler):
         if limited(self.client_address[0], 'checkout', 10):
             return self.reply(429, {'message': 'Please wait a minute before trying again.'})
         try:
-            priced = shop.price_cart(data.get('items'), data.get('coupon'))
+            priced = shop.price_cart(data.get('items'), data.get('coupon'), str(data.get('delivery') or ''))
         except ValueError as e:
             return self.reply(400, {'message': str(e)})
         number = shop.create_order(priced)
@@ -132,6 +135,15 @@ class Handler(SimpleHTTPRequestHandler):
             shop.update_order(number, status='cancelled', note='Checkout could not start: ' + str(e)[:200])
             return self.reply(502, {'message': 'We could not start secure checkout. Please try again in a moment.'})
         return self.reply(200, {'url': session['url'], 'order_number': number})
+
+    def coupon(self, data):
+        # Codes are checked here so private codes never appear in the website's code.
+        if limited(self.client_address[0], 'coupon', 12):
+            return self.reply(429, {'message': 'Too many attempts. Please wait a minute.'})
+        info = shop.coupon_info(data.get('code'))
+        if not info:
+            return self.reply(404, {'message': 'That code is not recognised. Please check it and try again.'})
+        return self.reply(200, info)
 
     def track(self, data):
         if limited(self.client_address[0], 'track', 10):
@@ -175,7 +187,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.reply(429, {'message': 'Please wait a minute before retrying.'})
             token = row[0] if row else secrets.token_urlsafe(32)
             status = 'sending' if configured() else 'pending'
-            db.execute('INSERT INTO subscribers VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET consent_at=excluded.consent_at,status=excluded.status,attempted_at=excluded.attempted_at', (email, token, now, status, now))
+            db.execute('INSERT INTO subscribers (email,token,consent_at,status,attempted_at) VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET consent_at=excluded.consent_at,status=excluded.status,attempted_at=excluded.attempted_at', (email, token, now, status, now))
         if status == 'pending':
             return self.reply(202, {'status': 'pending'})
         try:
@@ -187,6 +199,30 @@ class Handler(SimpleHTTPRequestHandler):
         with sqlite3.connect(DB) as db:
             db.execute("UPDATE subscribers SET status='sent' WHERE email=?", (email,))
         return self.reply(200, {'status': 'sent'})
+
+def send_pending_welcomes():
+    """Sign-ups saved while email wasn't set up (or that failed) get their welcome email once sending works."""
+    import threading
+    def loop():
+        while True:
+            try:
+                with sqlite3.connect(DB) as conn:
+                    rows = conn.execute("SELECT email, token FROM subscribers WHERE status IN ('pending','failed') AND attempted_at < ?",
+                                        (int(time.time()) - 300,)).fetchall()
+                for email, token in rows:
+                    with sqlite3.connect(DB) as conn:
+                        conn.execute("UPDATE subscribers SET status='sending', attempted_at=? WHERE email=?", (int(time.time()), email))
+                    try:
+                        deliver(email, token)
+                        status = 'sent'
+                    except Exception:
+                        status = 'failed'
+                    with sqlite3.connect(DB) as conn:
+                        conn.execute('UPDATE subscribers SET status=? WHERE email=?', (status, email))
+            except Exception:
+                pass
+            time.sleep(600)
+    threading.Thread(target=loop, daemon=True).start()
 
 def poll_pending_orders():
     """Without a webhook (e.g. testing on a laptop), ask Stripe every 30 seconds about recent unpaid orders."""
@@ -212,6 +248,8 @@ if __name__ == '__main__':
     host, port = os.getenv('DOCNOVA_HOST', '127.0.0.1'), int(os.getenv('DOCNOVA_PORT', '4173'))
     print('DocNova preview: http://%s:%d/' % (host, port), flush=True)
     print('Email mode: ' + ('SMTP enabled' if configured() else 'local pending signups — email sending not configured'), flush=True)
+    if configured():
+        send_pending_welcomes()
     mode = shop.stripe_mode()
     print('Stripe: ' + {'off': 'not configured — checkout disabled (add STRIPE_SECRET_KEY to .env)',
                         'test': 'TEST mode — use Stripe test cards, no real money',
