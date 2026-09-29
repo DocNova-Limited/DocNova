@@ -15,10 +15,13 @@ if [ -z "$GH" ]; then
 fi
 if ! "$GH" auth status -h github.com >/dev/null 2>&1; then
   echo
-  echo "Sign in to GitHub: a code will appear below and your web browser will open."
-  echo "Enter the code on the GitHub page, click Authorize, then come back to this window."
+  echo "Sign in to GitHub: your one-time code is below."
+  echo "Open https://github.com/login/device, enter the code, then click Authorize."
+  echo "(Claude can open that page for you.) This window waits until you have authorised."
   echo
-  "$GH" auth login -h github.com -p https -w || { read -r -p "Sign-in did not finish. Press Enter to close." _; exit 1; }
+  mkdir -p private
+  "$GH" auth login -h github.com -p https -w </dev/null 2>&1 | tee private/github-login.txt
+  "$GH" auth status -h github.com >/dev/null 2>&1 || { read -r -p "Sign-in did not finish. Press Enter to close." _; exit 1; }
 fi
 "$GH" auth setup-git -h github.com >/dev/null 2>&1
 echo
