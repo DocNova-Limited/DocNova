@@ -75,6 +75,15 @@ Every sign-up from the welcome popup or footer is saved in `private/subscription
 
 **To switch email on**, fill in the `DOCNOVA_SMTP_*`, `DOCNOVA_FROM_EMAIL` and `DOCNOVA_PUBLIC_URL` settings in `.env` using your email provider’s SMTP details (for example Google Workspace, Microsoft 365, Zoho or a sending service such as Brevo). `DOCNOVA_PUBLIC_URL` must be the live website address so links in emails work.
 
+## DocNova Rounds (loyalty & referrals)
+
+Page: `#/rounds`. Members join with their email (no password) and get a private card link by email.
+
+- 1 round for joining · 1 per scrub set · ½ per top or trousers · 1 when a referred colleague places their first paid order.
+- At 10 rounds a one-time `ROUNDS-XXXXXX` code is emailed (valid 12 months). At checkout it makes the most expensive set in the bag free; it can't be combined with other codes and the free set doesn't earn rounds.
+- Rounds are added automatically when an order is paid (matched by the email used at checkout); a full refund removes them.
+- Admin: `python3 rounds.py list` · `python3 rounds.py show someone@nhs.net` · `python3 rounds.py add someone@nhs.net 1 "Goodwill"` (use -1 or 0.5 as needed) · `python3 rounds.py link someone@nhs.net` (re-send their card link).
+
 ## Live Google reviews
 
 The bottom of the home page (and each product page) shows DocNova’s live Google rating and reviews in the site’s own design. The server asks Google’s Places API at most once an hour and keeps the answer in memory only. That’s about 720 requests a month, inside Google’s free allowance of 1,000 for this request type.

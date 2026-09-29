@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop
+import shop, loyalty
 from shop import ROOT, DB
 
 shop.init_db()
@@ -76,6 +76,11 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == '/api/payment-methods':
             data = shop.payment_methods()
             return self.reply(200, {**data, 'checkout_enabled': shop.stripe_ready(), 'mode': shop.stripe_mode()})
+        if url.path == '/api/rounds/me':
+            data = loyalty.dashboard(parse_qs(url.query).get('t', [''])[0])
+            if not data:
+                return self.reply(404, {'message': 'This link has expired. Enter your email below and we’ll send a fresh one.'})
+            return self.reply(200, data)
         if url.path == '/api/reviews':
             return self.reply(200, shop.google_reviews())
         if url.path == '/api/order':
@@ -95,7 +100,7 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/api/stripe/webhook':
             return self.stripe_webhook()
-        if path not in ('/api/subscribe', '/api/unsubscribe', '/api/checkout', '/api/track', '/api/coupon'):
+        if path not in ('/api/subscribe', '/api/unsubscribe', '/api/checkout', '/api/track', '/api/coupon', '/api/rounds/join', '/api/rounds/link'):
             return self.reply(404, {'message': 'Not found'})
         origin = self.headers.get('Origin')
         if origin and urlsplit(origin).netloc != self.headers.get('Host'):
@@ -108,6 +113,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.track(json.loads(raw))
             if path == '/api/coupon':
                 return self.coupon(json.loads(raw))
+            if path in ('/api/rounds/join', '/api/rounds/link'):
+                return self.rounds(path, json.loads(raw))
             if path == '/api/unsubscribe':
                 token = parse_qs(raw).get('token', [''])[0]
                 with sqlite3.connect(DB) as db:
@@ -135,6 +142,21 @@ class Handler(SimpleHTTPRequestHandler):
             shop.update_order(number, status='cancelled', note='Checkout could not start: ' + str(e)[:200])
             return self.reply(502, {'message': 'We could not start secure checkout. Please try again in a moment.'})
         return self.reply(200, {'url': session['url'], 'order_number': number})
+
+    def rounds(self, path, data):
+        if limited(self.client_address[0], 'rounds', 6):
+            return self.reply(429, {'message': 'Please wait a minute before trying again.'})
+        try:
+            if path == '/api/rounds/join':
+                if data.get('consent') is not True:
+                    return self.reply(400, {'message': 'Please tick the box to agree to the DocNova Rounds terms.'})
+                loyalty.join(data.get('email'), str(data.get('referrer') or ''), str(data.get('ref') or ''))
+            else:
+                loyalty.send_link(data.get('email'))
+        except ValueError as e:
+            return self.reply(400, {'message': str(e)})
+        # Same reply whether or not the address is a member, so nobody can check who has joined.
+        return self.reply(200, {'status': 'sent', 'email_enabled': configured()})
 
     def coupon(self, data):
         # Codes are checked here so private codes never appear in the website's code.

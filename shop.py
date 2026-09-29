@@ -120,6 +120,9 @@ def catalogue():
 
 def coupon_info(code):
     code = str(code or '').strip().upper()
+    if code.startswith('ROUNDS-'):
+        import loyalty
+        return loyalty.reward_info(code)
     spec = COUPONS.get(code)
     return {'code': code, 'percent_off': spec['percent_off']} if spec else None
 
@@ -151,8 +154,14 @@ def price_cart(raw_items, coupon='', delivery='uk'):
     lines = list(lines.values())
     subtotal = sum(l['unit_pence'] * l['qty'] for l in lines)
     code = str(coupon or '').strip().upper()
-    code = code if code in COUPONS else ''
-    discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100 if code else 0  # round half up, like the site
+    if code.startswith('ROUNDS-'):
+        import loyalty                      # DocNova Rounds reward: one scrub set free
+        if not loyalty.reward_info(code):
+            raise ValueError('That DocNova Rounds code has already been used or has expired.')
+        discount = loyalty.reward_discount(lines)
+    else:
+        code = code if code in COUPONS else ''
+        discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100 if code else 0  # round half up, like the site
     method = delivery if delivery in DELIVERY else None
     if not method:
         raise ValueError('Please choose a delivery option.')
@@ -190,6 +199,8 @@ def init_db():
         if 'source' not in cols:
             conn.execute("ALTER TABLE subscribers ADD COLUMN source TEXT DEFAULT 'website'")
     os.chmod(DB, 0o600)
+    import loyalty                        # DocNova Rounds tables
+    loyalty.init_db()
 
 def new_order_number():
     return 'DN-' + time.strftime('%y%m%d') + '-' + ''.join(secrets.choice(ORDER_ALPHABET) for _ in range(5))
@@ -294,6 +305,18 @@ def stripe_request(method, path, params=None, idempotency_key=None):
     except (OSError, http.client.HTTPException, ValueError) as e:  # dropped connection, timeout, bad reply
         raise StripeError('Stripe connection problem: ' + e.__class__.__name__, 502) from None
 
+def ensure_reward_coupon(code, amount):
+    """A one-off Stripe coupon worth exactly the free set in this order."""
+    cid = 'docnova-%s-%d' % (code.lower(), amount)
+    try:
+        return stripe_request('GET', '/v1/coupons/' + cid)['id']
+    except StripeError as e:
+        if e.status != 404:
+            raise
+    return stripe_request('POST', '/v1/coupons', {'id': cid, 'amount_off': amount, 'currency': 'gbp', 'duration': 'once',
+                                                  'max_redemptions': 1, 'name': 'DocNova Rounds · free scrub set'},
+                          idempotency_key='coupon-' + cid)['id']
+
 def ensure_coupon(code):
     """Create the Stripe coupon behind a site discount code the first time it is used."""
     spec = COUPONS[code]
@@ -343,7 +366,8 @@ def create_checkout_session(order_number, priced, base_url):
         params['custom_text']['after_submit'] = {'message': 'Click & Collect: the DocNova team will contact you today to arrange collection in the Cambridge area.'}
     if priced['coupon']:
         # Exactly one discount per order (allow_promotion_codes stays off, so no second code can be added at Stripe).
-        params['discounts'] = [{'coupon': ensure_coupon(priced['coupon'])}]
+        params['discounts'] = [{'coupon': ensure_reward_coupon(priced['coupon'], priced['discount'])
+                                if priced['coupon'].startswith('ROUNDS-') else ensure_coupon(priced['coupon'])}]
     session = stripe_request('POST', '/v1/checkout/sessions', params, idempotency_key='checkout-' + order_number)
     fields = {'checkout_session_id': session['id'], 'livemode': int(bool(session.get('livemode')))}
     if session.get('amount_total') is not None:
@@ -395,6 +419,12 @@ def sync_from_session(session, event_type=None):
         if fields:
             update_order(number, **fields)
         order = get_order(number)
+    if order['status'] in ('paid', 'dispatched', 'delivered'):
+        try:
+            import loyalty
+            loyalty.earn_from_order(order)          # DocNova Rounds (safe to repeat)
+        except Exception as e:
+            log_email_error('rounds for ' + order['order_number'], e)
     if order['status'] == 'paid' and not order['confirmation_sent']:
         send_order_email(order, 'confirmation')
     return order
@@ -422,6 +452,9 @@ def handle_refund(charge):
         return None
     full = charge.get('refunded') or charge.get('amount_refunded', 0) >= charge.get('amount', 1)
     update_order(order['order_number'], status='refunded' if full else 'partially_refunded')
+    if full:
+        import loyalty
+        loyalty.reverse_order(order)
     return get_order(order['order_number'])
 
 def verify_webhook(payload: bytes, header: str, secret: str, tolerance=300):
@@ -525,6 +558,10 @@ def send_order_email(order, kind):
                 % (order['order_number'], items, method, money(order['shipping'] or 0), money(order['total']),
                    'Click & Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
                    if collect else 'We will email you again with a tracking number as soon as it is dispatched.', track))
+        import loyalty
+        line = loyalty.progress_line(order['email'])
+        if line:
+            text += '\n' + line + '\nSee your card: ' + base + '/#/rounds\n'
     else:
         subject = 'Your DocNova order ' + order['order_number'] + ' is on its way'
         text = ('Good news: your order has been dispatched.\n\nOrder number: %s\nCarrier: %s\nTracking number: %s\n%s\n'
