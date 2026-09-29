@@ -153,9 +153,9 @@ def adjust(email, rounds, reason, joining, notify):
         with shop._lock, shop.db() as conn:
             conn.execute('INSERT INTO rounds_ledger (email, halves, reason, ref, created_at) VALUES (?,?,?,?,?)',
                          (email, halves, 'adjust', reason + ' #' + secrets.token_hex(4), int(time.time())))
-    codes = loyalty.issue_rewards(email)          # 10 rounds → free-set code emailed automatically
+    codes = loyalty.issue_rewards(email)          # 10 rounds → a free set waits for the owner's approval
     sent = loyalty.send_link(email) if notify else False
-    return {'balance': loyalty.fmt(loyalty.balance(email)), 'rewards_sent': codes, 'card_emailed': bool(sent)}
+    return {'balance': loyalty.fmt(loyalty.balance(email)), 'rewards_pending': codes, 'card_emailed': bool(sent)}
 
 def save_note(email, name, note):
     email = loyalty.norm(email)

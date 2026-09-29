@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices, returns
+import shop, loyalty, admin, invoices, returns, guard
 from shop import ROOT, DB
 
 shop.init_db()
@@ -230,6 +230,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.admin_reply(200, {'invoices': invoices.listing(), 'catalogue': invoices.catalogue_for_admin(),
                                           'sizes': list(shop.SIZES), 'bank_details_set': bool(invoices.bank_details()),
                                           'card_payments': shop.stripe_ready()})
+        if url.path == '/admin/api/reviews':
+            return self.admin_reply(200, guard.pending())
         if url.path == '/admin/api/sales':
             return self.admin_reply(200, {'sales': returns.sales()})
         if url.path == '/admin/api/order':
@@ -289,6 +291,8 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError('Unknown action.')
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
+            if path == '/admin/api/review':
+                return self.admin_reply(200, guard.decide(str(data.get('id') or ''), data.get('approve') is True, data.get('note')))
             if path == '/admin/api/return':
                 try:
                     r = returns.create(str(data.get('order_number') or '').upper(), data.get('items'), data.get('amount'),

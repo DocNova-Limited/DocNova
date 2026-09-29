@@ -30,6 +30,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS rounds_tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, expires_at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS rounds_ledger_email ON rounds_ledger(email);
         ''')
+    import guard
+    guard.init_db()
 
 def norm(email):
     email = str(email or '').strip().lower()
@@ -91,12 +93,17 @@ def join(email, referrer='', ref_code=''):
             raise ValueError('Please check the email address of the person who referred you.')
     existing = member(email)
     new_joiner = not existing or not existing['joined_at']
+    # A referral can only be attached at a brand-new registration: no card before (or one created in the last
+    # 24 hours, e.g. by the newsletter pop-up on the same visit), never ordered, not yourself or an alias of
+    # yourself, and the referrer must be a real member. Everything else is checked again on the first paid order.
+    import guard
+    brand_new = not existing or (int(time.time()) - (existing['created_at'] or 0) < 86400 and not existing['referred_by'])
+    ok_ref = (ref_email and member(ref_email) and brand_new and not has_paid_order(email)
+              and guard.canon_email(ref_email) != guard.canon_email(email) and not guard.alias_of_member(email))
     m = ensure_member(email, joined=True)
-    # A referral only counts for someone new who hasn't ordered yet, and never for yourself.
-    if ref_email and ref_email != email and not m['referred_by'] and not has_paid_order(email):
-        ensure_member(ref_email)
+    if ok_ref and not m['referred_by']:
         with shop.db() as conn:
-            conn.execute('UPDATE rounds_members SET referred_by=? WHERE email=?', (ref_email, email))
+            conn.execute('UPDATE rounds_members SET referred_by=? WHERE email=? AND referred_by IS NULL', (ref_email, email))
     send_link(email, welcome=new_joiner)
     return True
 
@@ -212,16 +219,17 @@ def earn_from_order(order):
         if halves:
             conn.execute('INSERT OR IGNORE INTO rounds_ledger (email, halves, reason, ref, created_at) VALUES (?,?,?,?,?)',
                          (email, halves, 'order', order['order_number'], now))
-        if first_order and m['referred_by']:
-            conn.execute('INSERT OR IGNORE INTO rounds_ledger (email, halves, reason, ref, created_at) VALUES (?,?,?,?,?)',
-                         (m['referred_by'], REFERRAL_BONUS, 'referral', order['order_number'], now))
         code = order.get('coupon') or ''
         if CODE_RE.fullmatch(code):
             conn.execute('UPDATE rounds_rewards SET redeemed_order=?, redeemed_at=? WHERE code=? AND redeemed_order IS NULL',
                          (order['order_number'], now, code))
-    issue_rewards(email)
+    import guard
     if first_order and m['referred_by']:
-        issue_rewards(m['referred_by'])
+        try:
+            guard.on_referral(order, email, m['referred_by'])     # strict checks; may be held for the owner
+        except Exception as e:
+            shop.log_email_error('referral check ' + order['order_number'], e)
+    issue_rewards(email)
     return halves
 
 def has_paid_order_before(email, number):
@@ -229,8 +237,14 @@ def has_paid_order_before(email, number):
         return bool(conn.execute("SELECT 1 FROM orders WHERE email=? AND order_number<>? AND paid_at IS NOT NULL", (email, number)).fetchone())
 
 def issue_rewards(email):
+    """Free sets are never issued automatically: at 10 rounds the owner is asked to approve (see guard.py)."""
+    import guard
+    return guard.request_rewards(email)
+
+def create_reward_code(email):
+    """Only called when the owner approves a free set in /admin."""
     issued = []
-    while balance(email) >= REWARD_AT:
+    if balance(email) >= REWARD_AT:
         now = int(time.time())
         with shop._lock, shop.db() as conn:
             for _ in range(10):
@@ -243,7 +257,7 @@ def issue_rewards(email):
                          (email, -REWARD_AT, 'reward', code, now))
         issued.append(code)
         send_reward(email, code)
-    return issued
+    return issued[0] if issued else None
 
 def send_reward(email, code):
     if not shop.smtp_configured():

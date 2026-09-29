@@ -8,6 +8,7 @@
 <style>
 :root{--navy:#182130;--ink:#101826;--gold:#d9b97f;--blue:#004c9b;--bg:#f3f1ec;--card:#fff;--line:#e4e0d8;--muted:#6b7280;--ok:#1d7a46;--warn:#9a5b00;--bad:#b42318}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--navy);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 header{background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header b{font:600 12px/1 Arial;letter-spacing:.2em;color:var(--gold)}
@@ -83,7 +84,13 @@ tbody tr:hover{background:#f7f5f0}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div id="tab-approvals" hidden>
+    <div class="help"><strong>Nothing is given away without you.</strong> Free sets wait here until you approve them — the customer only receives their code after you press <em>Approve</em>. Referrals that look suspicious (same name, phone, address or email as the referrer or an existing customer) are held here too, and info@docnova.co.uk gets an email about each one.</div>
+    <div id="apList"></div>
+    <h3 style="margin:26px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)">Recently decided</h3>
+    <div id="apRecent"></div>
+  </div>
   <div id="tab-sales" hidden>
     <div class="help"><strong>All sales in one place</strong> — website orders and invoices. To handle a return, press <em>Return / refund</em>: choose the items coming back, the amount to pay back, and the customer's DocNova Rounds for those items are taken off automatically.</div>
     <div class="tools"><input id="salesQ" type="search" placeholder="Search name, email, order or invoice"></div>
@@ -97,7 +104,7 @@ tbody tr:hover{background:#f7f5f0}
   </div>
   <div id="tab-people">
   <div class="stats" id="stats"></div>
-  <div class="help"><strong>Giving rounds for earlier purchases:</strong> click a person (or <em>Add a customer</em> for someone not listed), enter what they bought before, and press <em>Add rounds</em>. At 10 rounds their free-set code is emailed automatically.</div>
+  <div class="help"><strong>Giving rounds for earlier purchases:</strong> click a person (or <em>Add a customer</em> for someone not listed), enter what they bought before, and press <em>Add rounds</em>. At 10 rounds a free set appears under <em>Approvals</em> — the code is only sent when you approve it.</div>
   <div class="tools">
     <input id="q" type="search" placeholder="Search email or name">
     <select id="filter">
@@ -151,6 +158,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 async function load() {
   try { const d = await api('people'); PEOPLE = d.people; } catch (e) { return; }
+  loadApprovals();
   $('#login').hidden = true; $('#app').hidden = false;
   $('#who').replaceChildren(el('button', {class: 'ghost', type: 'button', onclick: async () => { await fetch('/admin/logout', {method: 'POST', headers: {'X-DocNova-Admin': '1'}}); showLogin(); }}, 'Sign out'));
   const cust = PEOPLE.filter(p => p.orders), subs = PEOPLE.filter(p => p.subscriber && p.subscriber !== 'unsubscribed');
@@ -212,7 +220,7 @@ async function open(email) {
       const r = await api('adjust', {email, rounds: n, reason: reason.value, joining: joining.checked, notify: notify.checked});
       await load(); await open(email);
       const m2 = $('#panel .msg'); if (m2) { m2.className = 'msg ok';
-        m2.textContent = 'Saved. Card now ' + r.balance + ' rounds.' + (r.rewards_sent.length ? ' Free-set code emailed: ' + r.rewards_sent.join(', ') + '.' : '') + (r.card_emailed ? ' Card link emailed to the customer.' : ''); }
+        m2.textContent = 'Saved. Card now ' + r.balance + ' rounds.' + (r.rewards_pending.length ? ' They have reached 10 rounds — approve the free set under Approvals.' : '') + (r.card_emailed ? ' Card link emailed to the customer.' : ''); }
     } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; save.disabled = false; }
   }}, 'Add rounds');
 
@@ -226,7 +234,7 @@ async function open(email) {
     el('section', {}, el('div', {class: 'rcard'},
       el('div', {style: 'display:flex;justify-content:space-between;font:600 11px Arial;letter-spacing:.18em;color:#c9d0db'}, el('span', {}, 'DOCNOVA ROUNDS'), el('span', {}, s.rounds + ' OF 10')),
       el('div', {class: 'stamps'}, stamps),
-      el('div', {style: 'font-size:14px;color:#c9d0db'}, s.halves >= 20 ? 'Free set due — it is issued automatically.' : s.to_go + ' rounds to go until a free scrub set.',
+      el('div', {style: 'font-size:14px;color:#c9d0db'}, s.halves >= 20 ? 'Free set due — approve it under Approvals.' : s.to_go + ' rounds to go until a free scrub set.',
         s.member ? '' : ' · Not joined yet'))),
     el('section', {class: 'card'}, el('h3', {}, 'Add rounds for earlier purchases'),
       el('p', {class: 'muted', style: 'margin:0'}, 'Enter what they bought before. 1 set = 1 round · 1 top or trousers = ½ round.'),
@@ -262,7 +270,8 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales';
+  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals';
+  if (b.dataset.tab === 'approvals') loadApprovals();
   if (b.dataset.tab === 'invoices') loadInvoices();
   if (b.dataset.tab === 'sales') loadSales();
 }));
@@ -272,9 +281,9 @@ const METHOD = {bank: 'bank transfer', cash: 'cash', card: 'card'};
 async function loadInvoices() {
   try { INV = await api('invoices'); } catch (e) { return; }
   $('#invHelp').replaceChildren(el('strong', {}, 'Invoices for direct sales: '),
-    'create an invoice, it is emailed to the customer with your bank details' + (INV.card_payments ? ' and a “Pay by card” button' : '') +
-    '. When the money arrives in your bank, press “Mark paid” — their DocNova Rounds are added automatically. Card payments are marked paid by themselves.',
-    INV.bank_details_set ? '' : el('div', {style: 'margin-top:8px;color:#b42318'}, 'Your bank details are not added yet, so invoices ask customers to contact you for them.'));
+    'create an invoice and it is emailed to the customer' + (INV.card_payments ? ' with a secure “Pay by card” button' : '') +
+    (INV.bank_details_set ? ' and your bank details' : ' (for bank transfer, the invoice asks them to contact you for your details)') +
+    '. When the money arrives, press “Mark paid” — their DocNova Rounds are added automatically. Card payments are marked paid by themselves.');
   renderInvoices();
 }
 $('#invFilter').addEventListener('change', renderInvoices);
@@ -433,6 +442,33 @@ async function returnDialog(number) {
       el('label', {class: 'check'}, notify, el('span', {}, 'Email the customer a return & refund confirmation')),
       el('p', {style: 'margin:14px 0 0'}, go), msg));
   $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
+}
+// ---------------------------------------------------------------- approvals (free sets + held referrals)
+async function loadApprovals() {
+  let d; try { d = await api('reviews'); } catch (e) { return; }
+  const n = d.pending.length; $('#apCount').hidden = !n; $('#apCount').textContent = n;
+  const card = (r, live) => el('div', {class: 'card', style: 'margin-bottom:12px'},
+    el('div', {style: 'display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap'},
+      el('div', {}, el('strong', {}, r.kind === 'reward' ? 'Free scrub set' : 'Referral round'), ' · ', el('span', {class: 'muted'}, r.id + ' · ' + day(r.created_at)),
+        el('div', {style: 'margin-top:6px'}, r.kind === 'reward' ? ['Customer: ', el('strong', {}, r.email), ' — card has ' + r.balance + ' rounds'] :
+          ['New customer ', el('strong', {}, r.email), ' (order ' + (r.order_number || '—') + ') referred by ', el('strong', {}, r.referrer), ' — ' + r.referrals + ' referral rounds so far'])),
+      live ? el('div', {class: 'acts'},
+        el('button', {type: 'button', class: 'gold', onclick: () => decideReview(r, true)}, r.kind === 'reward' ? 'Approve & email code' : 'Approve referral'),
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => decideReview(r, false)}, 'Decline'),
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => open(r.kind === 'reward' ? r.email : r.referrer)}, 'View card'))
+        : el('span', {class: 'pill ' + (r.status === 'approved' ? 'ok' : 'bad')}, r.status + (r.code ? ' · ' + r.code : ''))),
+    r.reasons.length && r.kind === 'referral' ? el('ul', {style: 'margin:10px 0 0;padding-left:18px;color:#9a5b00'}, r.reasons.map(x => el('li', {}, x))) : '',
+    r.note ? el('p', {class: 'muted', style: 'margin:8px 0 0'}, 'Note: ' + r.note) : '');
+  $('#apList').replaceChildren(...(n ? d.pending.map(r => card(r, true)) : [el('p', {class: 'muted'}, 'Nothing waiting for approval.')]));
+  $('#apRecent').replaceChildren(...(d.recent.length ? d.recent.map(r => card(r, false)) : [el('p', {class: 'muted'}, 'None yet.')]));
+}
+async function decideReview(r, approve) {
+  const what = r.kind === 'reward' ? 'the free scrub set for ' + r.email + (approve ? ' (their code is emailed now and 10 rounds come off the card)' : '') : 'the referral round for ' + r.referrer;
+  const note = prompt((approve ? 'Approve ' : 'Decline ') + what + '?\n\nOptional note (only you see it):', '');
+  if (note === null) return;
+  try { const x = await api('review', {id: r.id, approve, note}); alert(approve ? (x.code ? 'Approved — code ' + x.code + ' emailed to the customer.' : 'Approved.') : 'Declined.'); }
+  catch (e) { alert(e.message); }
+  loadApprovals(); load();
 }
 load();
 </script>

@@ -112,7 +112,11 @@ def create(number, items, amount, method, reason='', stripe_refund=False, notify
                          (loyalty.norm(order['email']), -halves, 'return', number + ' ' + rid, now))
     all_back = all(l['returnable'] - sum(x['qty'] for x in lines if _key(x) == _key(l)) <= 0 for l in info['lines'])
     fully_refunded = info['refunded'] + pence >= info['total']
-    shop.update_order(number, status='refunded' if (all_back and fully_refunded) or (fully_refunded and not lines) else 'partially_refunded')
+    new_status = 'refunded' if (all_back and fully_refunded) or (fully_refunded and not lines) else 'partially_refunded'
+    shop.update_order(number, status=new_status)
+    if new_status == 'refunded':
+        import guard
+        guard.undo_referral_for_refund(number)
     if notify and order['email']:
         send_confirmation(rid)
     return {'id': rid, 'rounds_removed': loyalty.fmt(halves), 'refunded': shop.money(pence), 'stripe_refund': stripe_id,
