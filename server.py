@@ -2,11 +2,12 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin
+import shop, loyalty, admin, invoices
 from shop import ROOT, DB
 
 shop.init_db()
 admin.init_db()
+invoices.init_db()
 RATE = {}
 ORDER_RE = re.compile(r'DN-\d{6}-[A-Z0-9]{5}')
 
@@ -124,6 +125,8 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlsplit(self.path)
         if url.path == '/admin' or url.path.startswith('/admin/'):
             return self.admin_get(url)
+        if url.path.startswith('/invoice/'):
+            return self.invoice_page(url)
         if url.path == '/unsubscribe':
             token = parse_qs(url.query).get('token', [''])[0]
             if not re.fullmatch(r'[A-Za-z0-9_-]{30,100}', token):
@@ -221,6 +224,10 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == '/admin/api/person':
             d = admin.person_detail(q.get('email', [''])[0])
             return self.admin_reply(200, d) if d else self.admin_reply(400, {'message': 'Invalid email.'})
+        if url.path == '/admin/api/invoices':
+            return self.admin_reply(200, {'invoices': invoices.listing(), 'catalogue': invoices.catalogue_for_admin(),
+                                          'sizes': list(shop.SIZES), 'bank_details_set': bool(invoices.bank_details()),
+                                          'card_payments': shop.stripe_ready()})
         if url.path == '/admin/api/export.csv':
             raw = admin.csv_export().encode('utf-8-sig')
             self.send_response(200)
@@ -238,7 +245,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.headers.get('X-DocNova-Admin') != '1' or (origin and urlsplit(origin).netloc != self.headers.get('Host')):
             return self.admin_reply(403, {'message': 'Forbidden'})
         try:
-            data = json.loads(self.read_body(4096).decode()) if int(self.headers.get('Content-Length', '0')) else {}
+            data = json.loads(self.read_body(32768).decode()) if int(self.headers.get('Content-Length', '0')) else {}
         except (ValueError, UnicodeError):
             return self.admin_reply(400, {'message': 'Invalid request.'})
         if path == '/admin/login':
@@ -258,12 +265,60 @@ class Handler(SimpleHTTPRequestHandler):
             if path == '/admin/api/adjust':
                 return self.admin_reply(200, admin.adjust(data.get('email'), data.get('rounds'), data.get('reason'),
                                                           data.get('joining') is True, data.get('notify') is True))
+            if path == '/admin/api/invoice/create':
+                inv = invoices.create(data)
+                return self.admin_reply(200, {'number': inv['number'], 'status': inv['status'], 'email_error': inv.get('email_error', ''), 'welcome_sent': inv.get('welcome_sent'),
+                                              'url': self.base_url() + '/invoice/' + inv['token']})
+            if path == '/admin/api/invoice/action':
+                number, action = str(data.get('number') or ''), data.get('action')
+                if action == 'paid':
+                    inv = invoices.mark_paid(number, str(data.get('method') or 'bank') if data.get('method') in ('bank', 'cash', 'card') else 'bank')
+                elif action == 'undo':
+                    inv = invoices.undo_paid(number)
+                elif action == 'cancel':
+                    inv = invoices.cancel(number)
+                elif action == 'resend':
+                    invoices.send(number); inv = invoices.get(number)
+                else:
+                    raise ValueError('Unknown action.')
+                return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
             if path == '/admin/api/note':
                 admin.save_note(data.get('email'), data.get('name'), data.get('note'))
                 return self.admin_reply(200, {'ok': True})
         except ValueError as e:
             return self.admin_reply(400, {'message': str(e)})
         return self.admin_reply(404, {'message': 'Not found'})
+
+    def invoice_page(self, url):
+        parts = url.path.strip('/').split('/')
+        inv = invoices.by_token(parts[1]) if len(parts) in (2, 3) else None
+        if not inv:
+            return self.html('<h1>Invoice not found</h1><p>Please use the link in your DocNova email, or contact info@docnova.co.uk.</p>', 404)
+        base = self.base_url()
+        if len(parts) == 3 and parts[2] == 'pay':
+            if limited(self.client_address[0], 'invoice-pay', 10):
+                return self.html('<h1>Please wait a minute</h1><p>Then try again.</p>', 429)
+            try:
+                target = invoices.start_card_payment(inv['token'], base)
+            except shop.StripeError:
+                target = None
+            self.send_response(303)
+            self.send_header('Location', target or base + '/invoice/' + inv['token'])
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            return None
+        if len(parts) != 2:
+            return self.html('<h1>Not found</h1>', 404)
+        inv = invoices.check_card(inv)
+        raw = invoices.page(inv, base, just_paid='paid=1' in (url.query or '')).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Robots-Tag', 'noindex, nofollow')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.end_headers()
+        self.wfile.write(raw)
 
     def checkout(self, data):
         if not shop.stripe_ready():
@@ -402,6 +457,10 @@ def poll_pending_orders():
                         (int(time.time()) - 86400,))]
             except Exception:
                 continue
+            try:
+                invoices.check_open_card_payments()
+            except Exception:
+                pass
             for order in rows:  # one bad order never stops the others
                 try:
                     shop.refresh_order_from_stripe(order)
