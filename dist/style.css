@@ -255,3 +255,12 @@ transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));tra
 @media(max-width:800px){.r-presets button{flex-direction:column;align-items:flex-start;gap:2px}}
 .pip.gift{margin-left:1.2cqw}
 .r-hero-copy>p{max-width:460px}.r-strip .r-strip-gift strong{font-size:36px}
+
+/* Blue Light Card partner (text only — BLC logo needs their written consent) */
+.announcement .ann-bl strong{color:#9fc3ff}
+.bl-strip{display:grid;grid-template-columns:auto 1fr auto;gap:28px;align-items:center;margin:34px 4% 0;padding:30px 36px;border-radius:16px;color:#fff;background:radial-gradient(600px 260px at 0% 0%,#1f5fbf55,transparent 70%),linear-gradient(120deg,#0b2a5b,#123d82 60%,#0b2a5b)}
+.bl-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#ffffff14;box-shadow:inset 0 0 0 1px #ffffff30;color:#cfe2ff}.bl-mark svg{width:34px;height:34px}
+.bl-copy .eyebrow{color:#9fc3ff;margin-bottom:8px}.bl-copy h2{font-size:clamp(24px,2.4vw,34px);margin:0 0 8px}.bl-copy h2 em{color:#fff;border-bottom:2px solid #6fa8ff}.bl-copy p{margin:0;color:#d5e3f7;font-size:15px;max-width:720px}
+.bl-hint{display:flex;gap:8px;align-items:center;font-size:13px;color:#123d82;background:#eef4fd;border-radius:6px;padding:9px 12px;margin:10px 0 0}.bl-hint svg{width:18px;height:18px;flex:none;display:block}
+.bl-badge{display:inline-flex!important;gap:10px;align-items:center;border:1px solid #ffffff30;border-radius:10px;padding:9px 14px;margin:6px 0 14px!important;color:#fff!important;font-size:13px!important;line-height:1.3}.bl-badge svg{width:24px;height:24px;color:#9fc3ff;flex:none}.bl-badge small{color:#c4c9d0;font-size:12px}
+@media(max-width:800px){.bl-strip{grid-template-columns:1fr;margin:24px 5% 0;padding:26px 22px;gap:16px}.bl-strip .btn{justify-self:start}}

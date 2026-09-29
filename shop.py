@@ -23,11 +23,13 @@ DELIVERY = {
     'ie': {'label': 'Republic of Ireland delivery', 'pence': 995, 'free_from': None, 'countries': ['IE'], 'days': (5, 8)},
     'collect': {'label': 'Click & Collect (Cambridge area)', 'pence': 0, 'free_from': None, 'countries': None, 'days': None},
 }
-# Discount codes. WELCOME10 is the public welcome offer. Private codes (e.g. for Blue Light card holders) live
+# Discount codes. FIRSTSHIFT10 is the welcome offer (sent by email only). Private codes (e.g. for Blue Light card holders) live
 # only in .env as DOCNOVA_PRIVATE_CODES="CODE:percent,CODE:percent", so they never appear in the website's code
 # or in Git. Codes are checked by the server; an order carries at most one code, and Stripe's own
 # promotion-code box is never switched on, so codes can't be combined.
-COUPONS = {'WELCOME10': {'stripe_id': 'docnova-welcome10', 'percent_off': 10, 'name': 'WELCOME10 · 10% off products'}}
+COUPONS = {'FIRSTSHIFT10': {'stripe_id': 'docnova-firstshift10', 'percent_off': 10, 'name': 'FIRSTSHIFT10 · 10% off products'},
+           # Older welcome code, still honoured for people who received it before FIRSTSHIFT10.
+           'WELCOME10': {'stripe_id': 'docnova-welcome10', 'percent_off': 10, 'name': 'WELCOME10 · 10% off products'}}
 
 def load_private_codes():
     for part in os.getenv('DOCNOVA_PRIVATE_CODES', '').split(','):

@@ -16,8 +16,8 @@ def deliver(email, token):
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
     link = base + '/unsubscribe?token=' + token
     template = (ROOT / 'email' / 'welcome.html').read_text()
-    shop.send_mail(email, 'Welcome to DocNova — your 10% code is inside',
-                   'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code WELCOME10 at checkout '
+    shop.send_mail(email, 'Welcome to DocNova — your first shift is on us (10% off inside)',
+                   'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code FIRSTSHIFT10 at checkout '
                    '(products only, delivery excluded; one discount code per order).\n\nShop the collection: ' + base + '\n\n'
                    'DocNova Ltd · Registered in England & Wales No. 16502835 · Cambridge, UK\nUnsubscribe: ' + link,
                    template.replace('{{SHOP_URL}}', base).replace('{{UNSUBSCRIBE_URL}}', link))

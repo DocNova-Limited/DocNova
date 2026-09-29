@@ -30,7 +30,7 @@ The `dist` folder can be served by static hosting for the shopping demo, but the
 | `shop.py` | Server-side prices, orders database, Stripe API calls and order emails |
 | `orders.py` | Order admin: list, view, mark dispatched with tracking number, delivered, cancelled |
 | `.env.example` | Template for Stripe keys and email settings; copy to `.env` (never committed) |
-| `email/welcome.html` | Branded WELCOME10 email template |
+| `email/welcome.html` | Branded FIRSTSHIFT10 welcome email template |
 | `email-settings.example` | SMTP configuration variable names; contains no credentials |
 | `data/schema.sql` | Subscriber database schema, automatically created by the server |
 | `data/catalogue-sources.json` | Verified prices, approved sizes/colours and source notes |
@@ -58,7 +58,8 @@ Prices are set in `shop.py` (`DELIVERY`); the website only sends which option wa
 
 ### Discount codes — one per order
 
-- **WELCOME10** — 10% off products, offered in the welcome popup and welcome email.
+- **FIRSTSHIFT10** — 10% off products, sent only in the welcome email (WELCOME10 still works for anyone who received it earlier).
+- **Blue Light Card:** DocNova is listed on the Blue Light Card "Near You" map; members use the private BLUELIGHT15 code. Do NOT use the Blue Light Card logo without their written consent (their terms for local businesses).
 - **Private codes** — not shown anywhere on the website. They are set only in the private `.env` file as
   `DOCNOVA_PRIVATE_CODES="CODE:15,OTHERCODE:20"` (code and percentage), so they never appear in the site’s code or in Git.
 
@@ -71,7 +72,7 @@ Every sign-up from the welcome popup or footer is saved in `private/subscription
 - `python3 subscribers.py list` — everyone who signed up and whether their welcome email went out.
 - `python3 subscribers.py export` — `subscribers.csv` of active subscribers for an email tool (keep it private).
 
-**Welcome email:** when email sending is set up, each new subscriber automatically receives the branded welcome email (`email/welcome.html`) with WELCOME10 and an unsubscribe link. Sign-ups saved before email was set up are sent automatically (checked every 10 minutes) once it is.
+**Welcome email:** when email sending is set up, each new subscriber automatically receives the branded welcome email (`email/welcome.html`) with FIRSTSHIFT10 and an unsubscribe link. Sign-ups saved before email was set up are sent automatically (checked every 10 minutes) once it is.
 
 **To switch email on**, fill in the `DOCNOVA_SMTP_*`, `DOCNOVA_FROM_EMAIL` and `DOCNOVA_PUBLIC_URL` settings in `.env` using your email provider’s SMTP details (for example Google Workspace, Microsoft 365, Zoho or a sending service such as Brevo). `DOCNOVA_PUBLIC_URL` must be the live website address so links in emails work.
 
