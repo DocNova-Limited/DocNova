@@ -80,7 +80,7 @@ Every sign-up from the welcome popup or footer is saved in `private/subscription
 Page: `#/rounds`. Members join with their email (no password) and get a private card link by email.
 
 - 1 round for joining · 1 per scrub set · ½ per top or trousers · 1 when a referred colleague places their first paid order.
-- Buy 10, get 1 free: at 10 rounds a one-time `ROUNDS-XXXXXX` code is emailed (valid 12 months). At checkout it makes the most expensive set in the bag free; it can't be combined with other codes and the free set doesn't earn rounds.
+- Complete 10 rounds, get a set free: at 10 rounds a one-time `ROUNDS-XXXXXX` code is emailed (valid 12 months). At checkout it makes the most expensive set in the bag free; it can't be combined with other codes and the free set doesn't earn rounds.
 - Rounds are added automatically when an order is paid (matched by the email used at checkout); a full refund removes them.
 - Admin: `python3 rounds.py list` · `python3 rounds.py show someone@nhs.net` · `python3 rounds.py add someone@nhs.net 1 "Goodwill"` (use -1 or 0.5 as needed) · `python3 rounds.py link someone@nhs.net` (re-send their card link).
 
