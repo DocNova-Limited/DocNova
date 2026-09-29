@@ -59,7 +59,7 @@ Prices are set in `shop.py` (`DELIVERY`); the website only sends which option wa
 ### Discount codes — one per order
 
 - **FIRSTSHIFT10** — 10% off products, sent only in the welcome email. WELCOME10 was retired on 29 Sep 2026 and no longer works.
-- **Blue Light Card:** DocNova is listed on the Blue Light Card "Near You" map; members use the private BLUELIGHT15 code. Do NOT use the Blue Light Card logo without their written consent (their terms for local businesses).
+- **Blue Light Card:** DocNova is listed on the Blue Light Card "Near You" map; members use the private FRONTLINE15 code (15%, set in .env; BLUELIGHT15 retired 29 Sep 2026). Do NOT use the Blue Light Card logo without their written consent (their terms for local businesses).
 - **Private codes** — not shown anywhere on the website. They are set only in the private `.env` file as
   `DOCNOVA_PRIVATE_CODES="CODE:15,OTHERCODE:20"` (code and percentage), so they never appear in the site’s code or in Git.
 
