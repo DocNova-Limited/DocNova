@@ -5,10 +5,11 @@ PY='/Users/drusmanmacbookpro/.cache/codex-runtimes/codex-primary-runtime/depende
 [ -x "$PY" ] || PY=python3
 echo "DocNova Stripe setup (TEST MODE - no real money)"
 echo "------------------------------------------------"
-echo "In Stripe, click the Secret key (starts with sk_test_) to copy it."
-echo "Then click inside this window, paste it with Command + V (it will NOT show on screen), and press Enter:"
-read -r -s KEY
-echo
+KEY=$(pbpaste 2>/dev/null | tr -d '[:space:]')
+case "$KEY" in
+  sk_test_*|rk_test_*) echo "Found your Stripe test key on the clipboard." ;;
+  *) echo "In Stripe, click the Secret key (starts with sk_test_) to copy it, then run this again."; read -r -p "Press Enter to close." _; exit 1 ;;
+esac
 "$PY" - "$KEY" <<'PYEOF'
 import sys, os, json, base64, urllib.request, urllib.error
 from pathlib import Path
