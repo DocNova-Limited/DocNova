@@ -407,6 +407,8 @@ def refresh_order_from_stripe(order):
             return sync_from_session(session) or order
         except StripeError:
             pass
+    if order and order['status'] == 'paid' and not order['confirmation_sent']:
+        send_order_email(order, 'confirmation')  # retry a confirmation that could not be sent earlier
     return order
 
 def handle_refund(charge):
@@ -494,6 +496,14 @@ def send_mail(to, subject, text, html=None):
 def money(pence):
     return '£%.2f' % (pence / 100)
 
+def log_email_error(what, err):
+    """Keep a short private note of email failures (private/email-errors.log) so they can be diagnosed."""
+    try:
+        with open(ROOT / 'private' / 'email-errors.log', 'a') as f:
+            f.write('%s  %s: %s: %s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), what, err.__class__.__name__, str(err)[:200]))
+    except OSError:
+        pass
+
 def send_order_email(order, kind):
     """Order confirmation / dispatch notice. Skipped quietly when SMTP is not set up (Stripe still sends its receipt)."""
     flag = 'confirmation_sent' if kind == 'confirmation' else 'dispatch_sent'
@@ -518,7 +528,8 @@ def send_order_email(order, kind):
                                             ('Carrier tracking: ' + order['tracking_url'] + '\n') if order['tracking_url'] else '', track))
     try:
         send_mail(order['email'], subject, text)
-    except Exception:
+    except Exception as e:
+        log_email_error('%s email for %s' % (kind, order['order_number']), e)
         return False
     update_order(order['order_number'], **{flag: 1})
     return True

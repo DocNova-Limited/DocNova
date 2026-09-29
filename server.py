@@ -233,7 +233,7 @@ def poll_pending_orders():
             try:
                 with shop.db() as conn:
                     rows = [dict(r) for r in conn.execute(
-                        "SELECT * FROM orders WHERE status IN ('awaiting_payment','processing') AND checkout_session_id IS NOT NULL AND created_at > ?",
+                        "SELECT * FROM orders WHERE (status IN ('awaiting_payment','processing') OR (status='paid' AND confirmation_sent=0)) AND checkout_session_id IS NOT NULL AND created_at > ?",
                         (int(time.time()) - 86400,))]
             except Exception:
                 continue
