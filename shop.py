@@ -27,9 +27,7 @@ DELIVERY = {
 # only in .env as DOCNOVA_PRIVATE_CODES="CODE:percent,CODE:percent", so they never appear in the website's code
 # or in Git. Codes are checked by the server; an order carries at most one code, and Stripe's own
 # promotion-code box is never switched on, so codes can't be combined.
-COUPONS = {'FIRSTSHIFT10': {'stripe_id': 'docnova-firstshift10', 'percent_off': 10, 'name': 'FIRSTSHIFT10 · 10% off products'},
-           # Older welcome code, still honoured for people who received it before FIRSTSHIFT10.
-           'WELCOME10': {'stripe_id': 'docnova-welcome10', 'percent_off': 10, 'name': 'WELCOME10 · 10% off products'}}
+COUPONS = {'FIRSTSHIFT10': {'stripe_id': 'docnova-firstshift10', 'percent_off': 10, 'name': 'FIRSTSHIFT10 · 10% off products'}}  # WELCOME10 retired 29 Sep 2026
 
 def load_private_codes():
     for part in os.getenv('DOCNOVA_PRIVATE_CODES', '').split(','):

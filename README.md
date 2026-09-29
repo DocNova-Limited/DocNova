@@ -58,7 +58,7 @@ Prices are set in `shop.py` (`DELIVERY`); the website only sends which option wa
 
 ### Discount codes — one per order
 
-- **FIRSTSHIFT10** — 10% off products, sent only in the welcome email (WELCOME10 still works for anyone who received it earlier).
+- **FIRSTSHIFT10** — 10% off products, sent only in the welcome email. WELCOME10 was retired on 29 Sep 2026 and no longer works.
 - **Blue Light Card:** DocNova is listed on the Blue Light Card "Near You" map; members use the private BLUELIGHT15 code. Do NOT use the Blue Light Card logo without their written consent (their terms for local businesses).
 - **Private codes** — not shown anywhere on the website. They are set only in the private `.env` file as
   `DOCNOVA_PRIVATE_CODES="CODE:15,OTHERCODE:20"` (code and percentage), so they never appear in the site’s code or in Git.
@@ -98,7 +98,7 @@ The bottom of the home page (and each product page) shows DocNova’s live Googl
 Checkout uses **Stripe Checkout** (Stripe’s hosted payment page). The customer reviews their bag on the site, presses *Continue to secure payment*, pays on Stripe, and returns to an order confirmation page with their order number.
 
 - **Payment methods:** the site never hard-codes a list. Stripe shows every method switched on in *Dashboard → Settings → Payment methods* that suits the customer’s device and country (cards, Apple Pay, Google Pay, Link, Klarna, Revolut Pay, PayPal and others). The checkout page and footer show the same list, read from your Stripe account.
-- **Prices are enforced on the server.** `shop.py` reads prices from `dist/app.js`, so a customer cannot change what they pay. WELCOME10 becomes a Stripe coupon (10% off products, delivery excluded). UK delivery is £4.95, or free from £70 after any discount; Ireland £9.95; Click & Collect free.
+- **Prices are enforced on the server.** `shop.py` reads prices from `dist/app.js`, so a customer cannot change what they pay. FIRSTSHIFT10 becomes a Stripe coupon (10% off products, delivery excluded). UK delivery is £4.95, or free from £70 after any discount; Ireland £9.95; Click & Collect free.
 - **Order numbers:** every checkout gets an ID such as `DN-260926-7K4QP`. It is shown on Stripe’s payment page, on the confirmation page, in the Stripe payment description (searchable in the Dashboard) and in order emails.
 - **Order confirmation comes from Stripe’s webhook** (`/api/stripe/webhook`, signature-verified), so an order is recorded even if the customer closes the tab after paying. Bank payments that take a few days to confirm are handled too.
 - **Order tracking:** customers open *Track your order* (footer), then enter their order number and email to see *Order placed → Payment confirmed → Dispatched → Delivered*, the carrier, and the tracking number with a link.
