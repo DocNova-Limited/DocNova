@@ -5,7 +5,7 @@ Rules (kept in one place so the website, emails and admin tool always agree):
   * Every scrub set = 1 round; every top or pair of trousers = ½ round. Medical devices don't earn.
   * Referral: when someone who named you as their referrer places their first paid order, you get 1 round.
   * complete 10 rounds = the customer's next scrub set free, their choice, sent as a one-time ROUNDS-XXXXXX code (valid 12 months).
-  * The free set in a reward order doesn't earn a round; a fully refunded order has its rounds removed.
+  * The free set in a reward order, and any item given free (£0.00), doesn't earn a round; a fully refunded order has its rounds removed.
 Rounds are stored in halves (whole numbers) so there is never any rounding.
 """
 import re, secrets, time, os
@@ -201,6 +201,8 @@ def order_halves(order):
     cat = shop.catalogue()
     halves = 0
     for l in shop.json.loads(order['items_json']):
+        if l.get('unit_pence', 1) <= 0:
+            continue                  # complimentary items (£0.00 on an invoice) don't earn rounds
         p = cat.get(l['id']) or {}
         halves += EARN.get(p.get('category'), 0) * l['qty']
     if order.get('coupon') and CODE_RE.fullmatch(order['coupon']):
