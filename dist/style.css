@@ -283,3 +283,8 @@ transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));tra
 .care-fig{margin:18px 0 4px}.care-fig img{width:100%;max-width:340px;aspect-ratio:4/3;object-fit:cover;object-position:40% 45%;border-radius:4px}.care-fig figcaption{font-size:12px;color:var(--muted);margin-top:6px}
 @media(max-width:900px){.craft{grid-template-columns:1fr;padding:52px 5%;gap:30px}.craft-grid{height:auto;grid-template-columns:1fr 1fr;grid-template-rows:auto}.craft-grid .craft-main{grid-row:auto;grid-column:1/-1;aspect-ratio:4/5}.craft-grid figure:not(.craft-main){aspect-ratio:4/5}.craft-grid figcaption{font-size:12px;padding:8px 10px}}
 @media(max-width:900px){.craft-grid figure:not(.craft-main) figcaption{font-size:0;color:transparent;padding:6px 10px;left:8px;right:auto;bottom:8px}.craft-grid figure:not(.craft-main) figcaption b{font-size:12px;margin:0}}
+
+/* Home film */
+.home-portrait .hero-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%;background:#b6b2b5}
+.home-portrait:after{content:'';position:absolute;inset:auto 0 0 0;height:30%;background:linear-gradient(0deg,#10182659,transparent);pointer-events:none}
+.home-portrait>span{z-index:2;text-shadow:0 1px 8px #0006}

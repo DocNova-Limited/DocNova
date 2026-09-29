@@ -299,3 +299,11 @@ async function initRounds(){const t=hashParam('t');roundsSimState={sets:0,pieces
  catch(err){box.innerHTML=`<section class="r-member expired"><div><span class="eyebrow">YOUR CARD</span><h2>This link has expired.</h2><p>${esc(err.message||'Enter your email below and we’ll send a fresh one.')}</p><button class="btn light" onclick="roundsScroll('r-card')">Send me a new link ↗</button></div></section>`}}
 
 (function(){if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)return;document.addEventListener('pointermove',e=>{const c=e.target.closest&&e.target.closest('.stamp-card');document.querySelectorAll('.stamp-card.tilt').forEach(x=>{if(x!==c){x.classList.remove('tilt');x.style.removeProperty('--rx');x.style.removeProperty('--ry')}});if(!c||e.pointerType!=='mouse')return;const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;c.classList.add('tilt');c.style.setProperty('--rx',(-y*8).toFixed(2)+'deg');c.style.setProperty('--ry',(x*10).toFixed(2)+'deg');c.style.setProperty('--sx',((x+.5)*100).toFixed(0)+'%')},{passive:true})})();
+
+// Home film: respect "reduce motion" and pause when the tab or film is out of view (saves battery and data).
+(function(){const q=window.matchMedia?matchMedia('(prefers-reduced-motion: reduce)'):null;
+ function tune(){const v=document.querySelector('.hero-film');if(!v)return;v.muted=true;
+  if(q&&q.matches){v.removeAttribute('autoplay');v.pause();return}
+  const pl=()=>{const r=v.play();if(r&&r.catch)r.catch(()=>{})};pl();
+  if('IntersectionObserver' in window&&!v._io){v._io=new IntersectionObserver(e=>e.forEach(x=>x.isIntersecting&&!document.hidden?pl():v.pause()),{threshold:.1});v._io.observe(v)}}
+ window.addEventListener('hashchange',()=>setTimeout(tune,50));document.addEventListener('visibilitychange',tune);tune()})();
