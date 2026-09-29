@@ -17,19 +17,30 @@ echo
 import sys, re, os, smtplib, ssl
 from pathlib import Path
 frm, host, pw = sys.argv[1], sys.argv[2], sys.argv[3]
+import socket
+print('Checking the connection to', host, '...')
+for port in (443, 993):
+    try:
+        socket.create_connection((host, port), timeout=8).close(); print('  web/mail server reachable on port', port)
+    except Exception as e:
+        print('  port', port, 'not reachable:', e.__class__.__name__)
 ok = None
-for port in (465, 587):
+for port in (465, 587, 2525, 25):
     try:
         ctx = ssl.create_default_context()
-        s = smtplib.SMTP_SSL(host, port, context=ctx, timeout=20) if port == 465 else smtplib.SMTP(host, port, timeout=20)
-        if port == 587: s.starttls(context=ctx)
+        s = smtplib.SMTP_SSL(host, port, context=ctx, timeout=12) if port == 465 else smtplib.SMTP(host, port, timeout=12)
+        if port != 465:
+            try: s.starttls(context=ctx)
+            except smtplib.SMTPNotSupportedError: pass
         s.login(frm, pw); s.quit(); ok = port; break
     except smtplib.SMTPAuthenticationError:
         print('The mail server rejected that password. Please run this again and check it.'); sys.exit(1)
+    except ssl.SSLCertVerificationError:
+        print('Port %d: certificate name mismatch' % port)
     except Exception as e:
         print('Port %d: %s' % (port, e.__class__.__name__))
 if not ok:
-    print('Could not reach %s. Check the mail server name with ZeenHost (cPanel > Email Accounts > Connect Devices).' % host); sys.exit(1)
+    print('Could not connect to send email. Please send a screenshot of this window to Claude.'); sys.exit(1)
 env = Path('.env'); lines = env.read_text().splitlines() if env.exists() else []
 vals = {'DOCNOVA_SMTP_HOST': host, 'DOCNOVA_SMTP_PORT': str(ok), 'DOCNOVA_SMTP_USER': frm, 'DOCNOVA_SMTP_PASSWORD': pw,
         'DOCNOVA_FROM_EMAIL': frm}
