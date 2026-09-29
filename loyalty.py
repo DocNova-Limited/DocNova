@@ -4,7 +4,7 @@ Rules (kept in one place so the website, emails and admin tool always agree):
   * Joining bonus: 1 round, once per email address.
   * Every scrub set = 1 round; every top or pair of trousers = ½ round. Medical devices don't earn.
   * Referral: when someone who named you as their referrer places their first paid order, you get 1 round.
-  * 10 rounds = one free scrub set of the customer's choice, sent as a one-time ROUNDS-XXXXXX code (valid 12 months).
+  * 10 rounds = the customer's next (11th) scrub set free, their choice, sent as a one-time ROUNDS-XXXXXX code (valid 12 months).
   * The free set in a reward order doesn't earn a round; a fully refunded order has its rounds removed.
 Rounds are stored in halves (whole numbers) so there is never any rounding.
 """
@@ -36,7 +36,10 @@ def norm(email):
     return email if len(email) <= 254 and EMAIL_RE.fullmatch(email) else ''
 
 def fmt(halves):
-    return ('%d' % (halves // 2)) + ('½' if halves % 2 else '') if halves >= 0 else '-' + fmt(-halves)
+    if halves < 0:
+        return '-' + fmt(-halves)
+    whole = '%d' % (halves // 2) if halves >= 2 or not halves % 2 else ''
+    return whole + ('½' if halves % 2 else '')
 
 def _code(prefix, n):
     return prefix + ''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(n))
@@ -119,7 +122,7 @@ def send_link(email, welcome=False):
     m = member(email)
     share = base + '/#/rounds?ref=' + m['ref_code']
     text = ('%s\n\nView your card: %s\n(This private link works for %d days.)\n\nHow it works: every scrub set earns 1 round, '
-            'every top or pair of trousers ½ round. Reach 10 rounds and we send you a code for a free scrub set of your choice.\n\n'
+            'every top or pair of trousers ½ round. Collect 10 rounds and we send you a code for your next scrub set free — buy 10 sets, the 11th is on us.\n\n'
             'Refer a colleague: share %s — when they place their first order, you earn a bonus round.\n\nDocNova'
             % (lead, link, LINK_DAYS, share))
     try:
@@ -130,14 +133,14 @@ def send_link(email, welcome=False):
     return True
 
 def card_html(lead, bal, link, button, share='', code=''):
-    """Branded email with the 10-stamp card (matches the Rounds page)."""
+    """Branded email with the 10-round card plus the free 11th set (matches the Rounds page)."""
     base = os.environ.get('DOCNOVA_PUBLIC_URL', '').rstrip('/')
     done = min(bal, REWARD_AT)
     cells = ''
     for i in range(10):
         full = done >= (i + 1) * 2
         half = not full and done == i * 2 + 1
-        gift = i == 9
+        gift = False
         if full:
             bg, fg, border = ('#d9b97f' if gift else '#ffffff'), '#101826', ('#d9b97f' if gift else '#ffffff')
         elif half:
@@ -169,13 +172,14 @@ def card_html(lead, bal, link, button, share='', code=''):
             '<tr><td style="padding:10px 32px 6px"><table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#101826;border-radius:14px">'
             '<tr><td style="padding:18px 18px 6px;font:600 10px Arial;letter-spacing:.2em;color:#c9d0db">YOUR ROUNDS CARD</td>'
             '<td align="right" style="padding:18px 18px 6px;font:11px Arial;color:#ffffff">%s of 10</td></tr>'
-            '<tr><td colspan="2" align="center" style="padding:6px 10px 18px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>%s</tr></table></td></tr></table></td></tr>'
+            '<tr><td colspan="2" align="center" style="padding:6px 10px 18px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>%s</tr></table>'
+            '<p style="margin:12px 0 0"><span style="display:inline-block;border:1.5px solid #d9b97f;border-radius:30px;padding:8px 18px;font:600 12px Arial;letter-spacing:.16em;%s">&#127873; 11TH SET FREE</span></p></td></tr></table></td></tr>'
             '<tr><td align="center" style="padding:24px 32px 28px"><a href="%s" style="display:inline-block;background:#182130;color:#ffffff;'
             'text-decoration:none;font:600 15px Arial;padding:16px 30px">%s</a></td></tr>%s'
             '<tr><td style="border-top:1px solid #ece9e3;padding:18px 32px;font:12px/1.6 Arial;color:#8a909a;text-align:center">'
-            '1 round when you join · 1 per scrub set · ½ per top or trousers · 1 per colleague referred · 10 rounds = a free set<br>'
+            '1 round when you join · 1 per scrub set · ½ per top or trousers · 1 per colleague referred · 10 rounds = your 11th set free<br>'
             'DocNova Ltd · Registered in England &amp; Wales No. 16502835 · Cambridge, UK</td></tr>'
-            '</table></td></tr></table></body></html>' % (base, base, lead, code_box, fmt(done), cells, link, button, ref))
+            '</table></td></tr></table></body></html>' % (base, base, lead, code_box, fmt(done), cells, 'background:#d9b97f;color:#101826' if done >= REWARD_AT else 'color:#d9b97f', link, button, ref))
 
 def order_halves(order):
     cat = shop.catalogue()
@@ -237,10 +241,10 @@ def send_reward(email, code):
     if not shop.smtp_configured():
         return False
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
-    lead = ('<span style="font:26px/1.3 Georgia,serif;color:#182130">Congratulations — your tenth round is in.</span><br><br>'
-            'Your free DocNova scrub set is ready. Choose any set, any colour, any size, add it to your bag and enter your code at checkout. '
+    lead = ('<span style="font:26px/1.3 Georgia,serif;color:#182130">Congratulations — you’ve collected 10 rounds.</span><br><br>'
+            'Your 11th set is on us: your free DocNova scrub set is ready. Choose any set, any colour, any size, add it to your bag and enter your code at checkout. '
             'Your code is valid for 12 months.')
-    text = ('Congratulations — you have completed 10 DocNova Rounds!\n\nYour free scrub set code: %s\n\nChoose any scrub set, any colour, '
+    text = ('Congratulations — you have collected 10 DocNova Rounds, so your 11th set is on us!\n\nYour free scrub set code: %s\n\nChoose any scrub set, any colour, '
             'any size, and enter the code at checkout. It covers one set and is valid for 12 months.\n\nShop: %s\n\nDocNova' % (code, base))
     try:
         shop.send_mail(email, 'Your free DocNova scrub set is ready 🎁', text, card_html(lead, REWARD_AT, base + '/#/shop?category=Sets', 'Choose my free set ↗', code=code))
@@ -284,7 +288,7 @@ def progress_line(email):
         return ''
     b = balance(email)
     left = REWARD_AT - b
-    return ('DocNova Rounds: you now have %s of 10 rounds — %s to go until your free scrub set.' % (fmt(b), fmt(left))
+    return ('DocNova Rounds: you now have %s of 10 rounds — %s to go until your next set is free.' % (fmt(b), fmt(left))
             if left > 0 else 'DocNova Rounds: you have %s rounds.' % fmt(b))
 
 def dashboard(token):
