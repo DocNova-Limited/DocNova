@@ -116,7 +116,7 @@ def enrol_subscriber(email):
         return None
     m = ensure_member(email, joined=True)
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
-    return {'balance': fmt(balance(email)), 'card': base + '/#/rounds?t=' + new_token(email),
+    return {'balance': fmt(balance(email)), 'halves': balance(email), 'card': base + '/#/rounds?t=' + new_token(email),
             'share': base + '/#/rounds?ref=' + m['ref_code']}
 
 def send_link(email, welcome=False):
@@ -148,26 +148,20 @@ def send_link(email, welcome=False):
         return False
     return True
 
+CARD_VERSION = '1'
+
+def card_img(halves, link=''):
+    """The DocNova Rounds Platinum card exactly as it looks on the website (pictures of the site's own card, 0–10 rounds)."""
+    base = os.environ.get('DOCNOVA_PUBLIC_URL', '').rstrip('/')
+    h = max(0, min(int(halves or 0), REWARD_AT))
+    img = ('<img src="%s/assets/rounds-card/card-%d.jpg?v=%s" width="496" alt="Your DocNova Rounds Platinum card: %s of 10 rounds" '
+           'style="display:block;border:0;width:100%%;max-width:496px;height:auto;border-radius:18px">' % (base, h, CARD_VERSION, fmt(h)))
+    return ('<a href="%s" style="text-decoration:none">%s</a>' % (link, img)) if link else img
+
 def card_html(lead, bal, link, button, share='', code=''):
     """Branded email with the 10-round card plus the free set (matches the Rounds page)."""
     base = os.environ.get('DOCNOVA_PUBLIC_URL', '').rstrip('/')
     done = min(bal, REWARD_AT)
-    cells = ''
-    for i in range(10):
-        full = done >= (i + 1) * 2
-        half = not full and done == i * 2 + 1
-        gift = False
-        if full:
-            bg, fg, border = ('#d9b97f' if gift else '#ffffff'), '#101826', ('#d9b97f' if gift else '#ffffff')
-        elif half:
-            bg, fg, border = '#8f9bb0', '#101826', '#ffffff'
-        else:
-            bg, fg, border = 'transparent', ('#d9b97f' if gift else '#6f7b8f'), ('#d9b97f' if gift else '#46536a')
-        label = '&#127873;' if gift else str(i + 1)
-        cells += ('<td align="center" style="padding:5px"><div style="width:44px;height:44px;line-height:44px;border-radius:50%%;'
-                  'border:1.5px solid %s;background:%s;color:%s;font:600 14px/44px Arial,sans-serif;text-align:center">%s</div></td>' % (border, bg, fg, label))
-        if i == 4:
-            cells += '</tr><tr>'
     code_box = ('<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:6px 0 4px"><tr><td align="center" '
                 'style="background:#d9b97f;border-radius:10px;padding:18px"><p style="margin:0 0 6px;font:600 10px Arial;letter-spacing:.18em;color:#3b2e17">'
                 'YOUR FREE SET CODE</p><p style="margin:0;font:700 26px Arial;letter-spacing:.12em;color:#101826">%s</p></td></tr></table>' % code) if code else ''
@@ -185,17 +179,13 @@ def card_html(lead, bal, link, button, share='', code=''):
             '<tr><td><img src="%s/assets/rounds-email.jpg" width="560" alt="The DocNova team in navy, royal blue and burgundy scrubs" '
             'style="display:block;border:0;width:100%%;height:auto"></td></tr>'
             '<tr><td style="padding:32px 32px 8px"><p style="font:16px/1.65 Arial;color:#182130;margin:0 0 22px">%s</p>%s</td></tr>'
-            '<tr><td style="padding:10px 32px 6px"><table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#101826;border-radius:14px">'
-            '<tr><td style="padding:18px 18px 6px;font:600 10px Arial;letter-spacing:.2em;color:#c9d0db">YOUR ROUNDS CARD</td>'
-            '<td align="right" style="padding:18px 18px 6px;font:11px Arial;color:#ffffff">%s of 10</td></tr>'
-            '<tr><td colspan="2" align="center" style="padding:6px 10px 18px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>%s</tr></table>'
-            '<p style="margin:12px 0 0"><span style="display:inline-block;border:1.5px solid #d9b97f;border-radius:30px;padding:8px 18px;font:600 12px Arial;letter-spacing:.16em;%s">&#127873; 10 ROUNDS = 1 FREE SET</span></p></td></tr></table></td></tr>'
+            '<tr><td align="center" style="padding:10px 32px 6px">%s</td></tr>'
             '<tr><td align="center" style="padding:24px 32px 28px"><a href="%s" style="display:inline-block;background:#182130;color:#ffffff;'
             'text-decoration:none;font:600 15px Arial;padding:16px 30px">%s</a></td></tr>%s'
             '<tr><td style="border-top:1px solid #ece9e3;padding:18px 32px;font:12px/1.6 Arial;color:#8a909a;text-align:center">'
             '1 round when you join · 1 per scrub set · ½ per top or trousers · 1 per colleague referred · complete 10 rounds for a free set<br>'
             'DocNova Ltd · Registered in England &amp; Wales No. 16502835 · Cambridge, UK</td></tr>'
-            '</table></td></tr></table></body></html>' % (base, base, lead, code_box, fmt(done), cells, 'background:#d9b97f;color:#101826' if done >= REWARD_AT else 'color:#d9b97f', link, button, ref))
+            '</table></td></tr></table></body></html>' % (base, base, lead, code_box, card_img(done, link), link, button, ref))
 
 def order_halves(order):
     cat = shop.catalogue()

@@ -35,8 +35,11 @@ def by_token(token):
 
 def listing():
     with shop.db() as conn:
-        return [dict(r) for r in conn.execute('SELECT number, issue_date, due_at, customer_name, email, total, status, paid_at, paid_method, '
-                                              'order_number, sent_at, source, token FROM invoices ORDER BY created_at DESC LIMIT 500')]
+        rows = [dict(r) for r in conn.execute('SELECT i.number, i.issue_date, i.due_at, i.customer_name, i.email, i.total, i.status, i.paid_at, i.paid_method, '
+                                              'i.order_number, i.sent_at, i.source, i.token, o.status AS order_status, '
+                                              '(SELECT COALESCE(SUM(amount),0) FROM returns r WHERE r.order_number=i.order_number) AS refunded '
+                                              'FROM invoices i LEFT JOIN orders o ON o.order_number=i.order_number ORDER BY i.created_at DESC LIMIT 500')]
+    return rows
 
 def catalogue_for_admin():
     return sorted(({'id': p['id'], 'name': p['name'], 'category': p['category'], 'pence': p['pence'], 'device': p['device']}
@@ -107,8 +110,16 @@ def create(data):
         raise ValueError('An email address is needed to send the invoice.')
     now = int(time.time())
     with shop._lock, shop.db() as conn:
-        n = conn.execute("SELECT MAX(CAST(substr(number, ?) AS INTEGER)) FROM invoices", (len(PREFIX) + 1,)).fetchone()[0]
+        n = conn.execute("SELECT MAX(CAST(substr(number, ?) AS INTEGER)) FROM invoices WHERE number LIKE ?", (len(PREFIX) + 1, PREFIX + '%')).fetchone()[0]
         number = PREFIX + str(max(FIRST, (n or 0) + 1))
+        keep = str(data.get('number') or '').strip().upper()
+        if paid and keep:
+            # a past invoice keeps its original number (e.g. INV-000786 from Zoho Invoice)
+            if not re.fullmatch(r'[A-Z]{2,5}-\d{3,8}', keep) or keep.startswith(PREFIX):
+                raise ValueError('The original invoice number should look like INV-000786.')
+            if conn.execute('SELECT 1 FROM invoices WHERE number=?', (keep,)).fetchone():
+                raise ValueError('Invoice ' + keep + ' has already been added.')
+            number = keep
         conn.execute('INSERT INTO invoices (number, token, created_at, issue_date, due_at, customer_name, email, phone, address, lines_json, '
                      'subtotal, discount, delivery, total, note, status, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                      (number, secrets.token_urlsafe(24), now, issue, issue + due_days * 86400, name, email or None,
@@ -137,7 +148,7 @@ def _remember_name(email, name):
                      "ON CONFLICT(email) DO UPDATE SET name=COALESCE(NULLIF(customer_notes.name,''), excluded.name)",
                      (email, name, int(time.time())))
 
-def mark_paid(number, method, when=None, notify=True):
+def mark_paid(number, method, when=None, notify=True, payment_intent=None):
     inv = get(number)
     if not inv or inv['status'] == 'cancelled':
         raise ValueError('Invoice not found or cancelled.')
@@ -153,6 +164,8 @@ def mark_paid(number, method, when=None, notify=True):
                      (order_number, 'paid', inv['issue_date'], int(time.time()), inv['lines_json'], inv['subtotal'], inv['discount'],
                       inv['delivery'], inv['total'], inv['email'], inv['customer_name'], inv['phone'], when, 'collect',
                       'Invoice ' + number + ' · ' + method))
+        if payment_intent:
+            conn.execute('UPDATE orders SET payment_intent_id=? WHERE order_number=?', (payment_intent, order_number))
         conn.execute("UPDATE invoices SET status='paid', paid_at=?, paid_method=?, order_number=? WHERE number=? AND status<>'paid'",
                      (when, method, order_number, number))
     order = shop.get_order(order_number)
@@ -171,6 +184,9 @@ def undo_paid(number):
     if not inv or inv['status'] != 'paid':
         raise ValueError('Only a paid invoice can be marked unpaid.')
     order = shop.get_order(inv['order_number']) if inv['order_number'] else None
+    import returns
+    if order and returns.for_order(order['order_number']):
+        raise ValueError('This invoice already has a return or refund recorded, so it cannot be marked unpaid.')
     if order:
         loyalty.reverse_order(order)
         shop.update_order(order['order_number'], status='cancelled', note=(order['note'] or '') + ' · payment undone')
@@ -222,7 +238,8 @@ def check_card(inv):
         return inv
     if s.get('payment_status') == 'paid' and (s.get('metadata') or {}).get('invoice_number') == inv['number'] \
             and s.get('amount_total') == inv['total']:
-        return mark_paid(inv['number'], 'card')
+        pi = s.get('payment_intent')
+        return mark_paid(inv['number'], 'card', payment_intent=pi['id'] if isinstance(pi, dict) else pi)
     return inv
 
 def check_open_card_payments():
@@ -268,6 +285,17 @@ def page(inv, base, just_paid=False):
     if inv['delivery']:
         totals += '<tr><td colspan="3">Delivery</td><td class="n">%s</td></tr>' % shop.money(inv['delivery'])
     totals += '<tr class="t"><td colspan="3">%s</td><td class="n">%s</td></tr>' % ('Total paid' if status == 'paid' else 'Total due', shop.money(inv['total']))
+    refunds = []
+    if inv.get('order_number'):
+        import returns
+        refunds = returns.for_order(inv['order_number'])
+    for r in refunds:
+        what = ', '.join('%d × %s' % (l['qty'], l['name']) for l in json.loads(r['lines_json'])) or 'Refund'
+        totals += '<tr><td colspan="3" class="m">Returned %s: %s</td><td class="n">−%s</td></tr>' % (day(r['created_at']), _esc(what), shop.money(r['amount']))
+    if refunds:
+        net = inv['total'] - sum(r['amount'] for r in refunds)
+        totals += '<tr class="t"><td colspan="3">Net paid after refunds</td><td class="n">%s</td></tr>' % shop.money(net)
+        stamp = '<div class="stamp void">%s</div>' % ('REFUNDED' if net <= 0 else 'PARTLY REFUNDED')
     return '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>DocNova invoice %(num)s</title><style>
 body{margin:0;background:#f3f1ec;color:#182130;font:15px/1.55 Arial,Helvetica,sans-serif}
@@ -362,7 +390,7 @@ def send_receipt(number):
         pass
     lead = ('<p style="margin:0 0 14px">Thank you — we’ve received your payment of <strong style="color:#182130">%s</strong> for invoice '
             '<strong style="color:#182130">%s</strong>.</p>%s' % (shop.money(inv['total']), _esc(inv['number']),
-            ('<p style="margin:0;padding:14px 16px;background:#101826;color:#d9b97f;font-weight:600">%s</p>' % _esc(progress)) if progress else ''))
+            ('<p style="margin:0 0 14px;color:#182130;font-weight:600">%s</p>%s' % (_esc(progress), loyalty.card_img(loyalty.balance(inv['email']), card))) if progress else ''))
     extra = ('<tr><td align="center" style="padding:0 30px 26px"><a href="%s" style="color:#004c9b;font:600 14px Arial">View my DocNova Rounds card</a></td></tr>' % _esc(card)) if card else ''
     text = 'Thank you, we have received your payment of %s for invoice %s.\n\n%s\n\nYour paid invoice: %s\n%s\nDocNova Ltd · Cambridge, UK\n' % (
         shop.money(inv['total']), inv['number'], progress, url, ('Your Rounds card: ' + card + '\n') if card else '')
@@ -386,7 +414,7 @@ def send_rounds_welcome(number):
     share = base + '/#/rounds?ref=' + m['ref_code']
     bal = loyalty.balance(email)
     greet = _greet(inv['customer_name'])
-    ref = inv['note'] or inv['number']
+    ref = 'invoice ' + inv['number']
     lead = ('Dear %s, thank you for choosing DocNova. As one of our first customers, you are now a member of '
             '<strong>DocNova Rounds</strong>, our rewards programme. We have added your earlier purchase (%s) to your card, '
             'plus your 1-round joining bonus: you have <strong>%s of 10 rounds</strong>. Every scrub set earns 1 round, every top or pair of '

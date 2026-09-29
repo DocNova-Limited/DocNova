@@ -83,7 +83,12 @@ tbody tr:hover{background:#f7f5f0}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button></div>
+  <div id="tab-sales" hidden>
+    <div class="help"><strong>All sales in one place</strong> — website orders and invoices. To handle a return, press <em>Return / refund</em>: choose the items coming back, the amount to pay back, and the customer's DocNova Rounds for those items are taken off automatically.</div>
+    <div class="tools"><input id="salesQ" type="search" placeholder="Search name, email, order or invoice"></div>
+    <div class="tablewrap"><table><thead><tr><th>Date</th><th>Reference</th><th>Customer</th><th class="num">Items</th><th class="num">Total</th><th class="num">Refunded</th><th>Status</th><th>Actions</th></tr></thead><tbody id="salesRows"></tbody></table></div>
+  </div>
   <div id="tab-invoices" hidden>
     <div class="help" id="invHelp"></div>
     <div class="tools"><button class="gold" id="newInv" type="button">+ New invoice</button>
@@ -243,7 +248,8 @@ async function open(email) {
       d.history.length ? el('ul', {class: 'list'}, d.history.map(h => li(day(h.at) + ' · ' + h.what, (h.halves > 0 ? '+' : '') + h.rounds)))
         : el('p', {class: 'muted', style: 'margin:0'}, 'No rounds yet.')),
     el('section', {class: 'card'}, el('h3', {}, 'Website orders'),
-      d.orders.length ? el('ul', {class: 'list'}, d.orders.map(o => el('li', {}, el('div', {}, el('strong', {}, o.number), el('div', {class: 'muted'}, day(o.paid_at) + ' · ' + o.status + (o.coupon ? ' · code ' + o.coupon : '')), el('div', {class: 'muted'}, o.items.join(', '))), el('strong', {}, gbp(o.total_pence)))))
+      d.orders.length ? el('ul', {class: 'list'}, d.orders.map(o => el('li', {}, el('div', {}, el('strong', {}, o.number), el('div', {class: 'muted'}, day(o.paid_at) + ' · ' + o.status + (o.coupon ? ' · code ' + o.coupon : '') + (o.refunded_pence ? ' · refunded ' + gbp(o.refunded_pence) : '')), el('div', {class: 'muted'}, o.items.join(', '))),
+        el('div', {style: 'text-align:right'}, el('strong', {}, gbp(o.total_pence)), el('div', {}, el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy);padding:6px 10px;font-size:13px;margin-top:6px', onclick: () => returnDialog(o.number)}, 'Return / refund'))))))
         : el('p', {class: 'muted', style: 'margin:0'}, 'No website orders yet.')),
     el('section', {class: 'card'}, el('h3', {}, 'Private notes (only you see these)'),
       el('label', {}, 'Name'), nm, el('label', {}, 'Notes'), note,
@@ -256,8 +262,9 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices';
+  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales';
   if (b.dataset.tab === 'invoices') loadInvoices();
+  if (b.dataset.tab === 'sales') loadSales();
 }));
 let INV = {invoices: [], catalogue: [], sizes: []};
 const ST = {unpaid: ['Unpaid', 'no'], paid: ['Paid', 'ok'], cancelled: ['Cancelled', 'bad']};
@@ -285,11 +292,12 @@ function renderInvoices() {
     return el('tr', {}, el('td', {}, el('strong', {}, i.number), i.source === 'import' ? el('div', {class: 'muted'}, 'past sale') : ''),
       el('td', {}, day(i.issue_date)), el('td', {}, i.customer_name, el('div', {class: 'muted'}, i.email || 'no email')),
       el('td', {class: 'num'}, gbp(i.total)),
-      el('td', {}, el('span', {class: 'pill ' + st[1]}, st[0]), i.status === 'paid' ? el('div', {class: 'muted'}, day(i.paid_at) + ' · ' + (METHOD[i.paid_method] || i.paid_method)) :
+      el('td', {}, el('span', {class: 'pill ' + st[1]}, st[0]), i.refunded ? el('div', {}, el('span', {class: 'pill bad'}, (i.order_status === 'refunded' ? 'Refunded ' : 'Refunded ') + gbp(i.refunded))) : '', i.status === 'paid' ? el('div', {class: 'muted'}, day(i.paid_at) + ' · ' + (METHOD[i.paid_method] || i.paid_method)) :
         i.status === 'unpaid' && i.due_at && i.due_at * 1000 < Date.now() ? el('div', {class: 'muted', style: 'color:#b42318'}, 'overdue') : ''),
       el('td', {}, el('div', {class: 'acts'}, el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/invoice/' + i.token, target: '_blank', rel: 'noopener'}, 'View'),
         i.status === 'unpaid' ? [act('Mark paid', {action: 'paid'}, 'gold'), i.email ? act('Email again', {action: 'resend'}) : '', act('Cancel', {action: 'cancel'})] : '',
-        i.status === 'paid' ? act('Undo paid', {action: 'undo'}) : '')));
+        i.status === 'paid' ? [el('button', {type: 'button', class: 'gold', onclick: ev => { ev.stopPropagation(); returnDialog(i.order_number); }}, 'Return / refund'),
+          i.refunded ? '' : act('Undo paid', {action: 'undo'})] : '')));
   }) : [el('tr', {}, el('td', {colspan: 6, class: 'muted'}, 'No invoices yet.'))]));
 }
 $('#newInv').addEventListener('click', () => newInvoice());
@@ -302,7 +310,8 @@ function newInvoice() {
   const past = el('input', {type: 'checkbox'}), pdate = inp({type: 'date', value: new Date().toISOString().slice(0, 10)});
   const pmethod = el('select', {}, el('option', {value: 'bank'}, 'Bank transfer'), el('option', {value: 'cash'}, 'Cash'), el('option', {value: 'card'}, 'Card'));
   const welcome = el('input', {type: 'checkbox', checked: true});
-  const pastBox = el('div', {hidden: true}, el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Date paid'), pdate), el('div', {}, el('label', {}, 'Paid by'), pmethod)),
+  const orig = inp({type: 'text', maxlength: 20, placeholder: 'e.g. INV-000786 (optional)'});
+  const pastBox = el('div', {hidden: true}, el('div', {class: 'grid3'}, el('div', {}, el('label', {}, 'Date paid'), pdate), el('div', {}, el('label', {}, 'Paid by'), pmethod), el('div', {}, el('label', {}, 'Original invoice no.'), orig)),
     el('label', {class: 'check'}, welcome, el('span', {}, 'Email them a welcome to DocNova Rounds (shows their rounds and card)')));
   past.addEventListener('change', () => { pastBox.hidden = !past.checked; go.textContent = past.checked ? 'Save past sale' : 'Create & email invoice'; });
   const lines = el('div', {}), totals = el('div', {}), msg = el('p', {class: 'msg'});
@@ -339,7 +348,7 @@ function newInvoice() {
     try {
       const r = await api('invoice/create', {name: name.value, email: email.value, phone: phone.value, address: addr.value, lines: ls,
         discount: discount.value, delivery: delivery.value, due_days: due.value, note: note.value,
-        already_paid: past.checked, paid_method: pmethod.value, paid_date: pdate.value, welcome: past.checked && welcome.checked, source: past.checked ? 'import' : 'admin'});
+        already_paid: past.checked, paid_method: pmethod.value, paid_date: pdate.value, welcome: past.checked && welcome.checked, number: past.checked ? orig.value : '', source: past.checked ? 'import' : 'admin'});
       close(); await loadInvoices(); load();
       alert(r.email_error ? r.number + ' created. ' + r.email_error : r.number + (r.status === 'paid' ? ' saved as paid. Rounds added.' : ' created and emailed to the customer.'));
     } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; go.disabled = false; }
@@ -354,6 +363,74 @@ function newInvoice() {
       el('div', {class: 'grid3', style: 'margin-top:8px'}, el('div', {}, el('label', {}, 'Discount £'), discount), el('div', {}, el('label', {}, 'Delivery £'), delivery), el('div', {}, el('label', {}, 'Days to pay'), due)),
       el('label', {}, 'Note'), note, el('div', {style: 'margin-top:12px'}, totals)),
     el('section', {class: 'card'}, el('label', {class: 'check'}, past, el('span', {}, 'This is a past sale that is already paid (e.g. from Zoho) — save it and add the rounds, but don’t email an invoice')), pastBox,
+      el('p', {style: 'margin:14px 0 0'}, go), msg));
+  $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
+}
+// ---------------------------------------------------------------- all sales + returns
+let SALES = [];
+async function loadSales() { try { SALES = (await api('sales')).sales; } catch (e) { return; } renderSales(); }
+$('#salesQ').addEventListener('input', renderSales);
+function renderSales() {
+  const q = $('#salesQ').value.trim().toLowerCase();
+  const list = SALES.filter(r => !q || [r.order_number, r.invoice, r.email, r.customer_name].some(v => (v || '').toLowerCase().includes(q)));
+  $('#salesRows').replaceChildren(...(list.length ? list.map(r => el('tr', {},
+    el('td', {}, day(r.paid_at)),
+    el('td', {}, el('strong', {}, r.invoice || r.order_number), el('div', {class: 'muted'}, r.source + (r.invoice ? ' · ' + r.order_number : '') + (r.card ? ' · card' : ''))),
+    el('td', {}, r.customer_name || '—', el('div', {class: 'muted'}, r.email || '')),
+    el('td', {class: 'num'}, r.items), el('td', {class: 'num'}, gbp(r.total || 0)), el('td', {class: 'num'}, r.refunded ? '−' + gbp(r.refunded) : '—'),
+    el('td', {}, el('span', {class: 'pill ' + (/refund/.test(r.status) ? 'bad' : 'ok')}, r.label)),
+    el('td', {}, el('div', {class: 'acts'}, r.token ? el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/invoice/' + r.token, target: '_blank', rel: 'noopener'}, 'View') : '',
+      r.status === 'refunded' ? '' : el('button', {type: 'button', class: 'gold', onclick: () => returnDialog(r.order_number)}, 'Return / refund')))))
+    : [el('tr', {}, el('td', {colspan: 8, class: 'muted'}, 'No sales yet.'))]));
+}
+async function returnDialog(number) {
+  let d; try { d = await api('order?number=' + encodeURIComponent(number)); } catch (e) { return alert(e.message); }
+  const cat = {}; (INV.catalogue.length ? INV.catalogue : (await api('invoices')).catalogue).forEach(p => cat[p.id] = p);
+  const rows = d.lines.map(l => ({l, qty: el('input', {type: 'number', min: 0, max: l.returnable, value: 0, disabled: !l.returnable, style: 'width:80px'})}));
+  const left = d.total - d.refunded;
+  const amount = el('input', {type: 'number', min: 0, step: '0.01', max: (left / 100).toFixed(2), value: '0.00'});
+  const method = el('select', {}, d.can_card_refund ? el('option', {value: 'card'}, 'Card — refund through Stripe now') : '',
+    el('option', {value: 'bank'}, 'Bank transfer (I pay it back myself)'), el('option', {value: 'cash'}, 'Cash (I pay it back myself)'),
+    d.default_method === 'card' && !d.can_card_refund ? el('option', {value: 'card'}, 'Card — already refunded in Stripe') : '',
+    el('option', {value: 'none'}, 'No money back (exchange / goodwill)'));
+  method.value = d.can_card_refund ? 'card' : (d.default_method === 'card' ? 'card' : d.default_method);
+  const reason = el('input', {type: 'text', maxlength: 300, placeholder: 'e.g. wrong size, exchanged for L'});
+  const notify = el('input', {type: 'checkbox', checked: !!d.email});
+  const info = el('p', {class: 'muted', style: 'margin:10px 0 0'}), msg = el('p', {class: 'msg'});
+  const halves = () => rows.reduce((a, r) => { const c = cat[r.l.id]?.category; return a + (r.l.unit_pence > 0 ? (c === 'Sets' ? 2 : (c === 'Tops' || c === 'Pants') ? 1 : 0) : 0) * (+r.qty.value || 0); }, 0);
+  const upd = (fromItems) => {
+    if (fromItems) amount.value = (Math.min(rows.reduce((a, r) => a + r.l.paid_each * (+r.qty.value || 0), 0), left) / 100).toFixed(2);
+    const h = halves();
+    info.textContent = (d.email ? 'DocNova Rounds to take off: ' + (h / 2) + '. ' : 'No email on this sale, so no rounds are involved. ') + 'Can still be refunded: ' + gbp(left) + '.';
+  };
+  rows.forEach(r => r.qty.addEventListener('input', () => upd(true)));
+  const go = el('button', {class: 'gold', type: 'button', onclick: async () => {
+    const items = rows.map(r => ({id: r.l.id, size: r.l.size, qty: +r.qty.value || 0})).filter(i => i.qty);
+    const amt = +amount.value || 0, m = method.value, viaStripe = m === 'card' && d.can_card_refund && amt > 0;
+    if (!items.length && !amt) { msg.className = 'msg bad'; msg.textContent = 'Choose the items coming back and/or enter an amount.'; return; }
+    if (!confirm('Confirm return for ' + (d.name || d.email || number) + ':\n\n' + (items.length ? items.map(i => i.qty + ' × ' + (cat[i.id]?.name || i.id) + ' (' + i.size + ')').join('\n') + '\n' : '') +
+      'Refund: ' + gbp(Math.round(amt * 100)) + (viaStripe ? ' — paid back to their card through Stripe NOW' : m === 'none' ? '' : ' — you pay it back by ' + m) +
+      '\nRounds taken off: ' + (halves() / 2))) return;
+    go.disabled = true;
+    try {
+      const r = await api('return', {order_number: number, items, amount: amt, method: m, reason: reason.value, stripe_refund: viaStripe, notify: notify.checked});
+      close(); alert('Return ' + r.id + ' saved. Refund ' + r.refunded + (r.stripe_refund ? ' sent to their card via Stripe.' : '.') + (r.balance !== '' ? ' Rounds taken off: ' + r.rounds_removed + ' (card now ' + r.balance + ').' : ''));
+      load(); if (!$('#tab-sales').hidden) loadSales(); if (!$('#tab-invoices').hidden) loadInvoices();
+    } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; go.disabled = false; }
+  }}, 'Save return / refund');
+  upd(false);
+  $('#panel').replaceChildren(
+    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, 'Return / refund'), el('h2', {}, number)), el('button', {class: 'ghost', type: 'button', onclick: close}, 'Close')),
+    el('section', {class: 'card'}, el('h3', {}, 'Customer'), el('p', {style: 'margin:0'}, d.name || '—', el('br'), el('span', {class: 'muted'}, d.email || 'no email')),
+      el('p', {class: 'muted', style: 'margin:8px 0 0'}, 'Paid ' + gbp(d.total) + (d.refunded ? ' · already refunded ' + gbp(d.refunded) : ''))),
+    el('section', {class: 'card'}, el('h3', {}, 'Items coming back'),
+      el('ul', {class: 'list'}, rows.map(r => el('li', {}, el('div', {}, r.l.name + (r.l.size === 'Standard' ? '' : ' · ' + r.l.size),
+        el('div', {class: 'muted'}, 'Bought ' + r.l.qty + (r.l.returned ? ' · returned ' + r.l.returned : '') + ' · paid ' + gbp(r.l.paid_each) + ' each')), r.qty))),
+      info),
+    el('section', {class: 'card'}, el('h3', {}, 'Refund'),
+      el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Amount to refund £'), amount), el('div', {}, el('label', {}, 'How'), method)),
+      el('label', {}, 'Reason (shown to the customer)'), reason,
+      el('label', {class: 'check'}, notify, el('span', {}, 'Email the customer a return & refund confirmation')),
       el('p', {style: 'margin:14px 0 0'}, go), msg));
   $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }

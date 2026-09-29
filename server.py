@@ -2,12 +2,13 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices
+import shop, loyalty, admin, invoices, returns
 from shop import ROOT, DB
 
 shop.init_db()
 admin.init_db()
 invoices.init_db()
+returns.init_db()
 RATE = {}
 ORDER_RE = re.compile(r'DN-\d{6}-[A-Z0-9]{5}')
 
@@ -22,11 +23,12 @@ def deliver(email, token):
     except Exception as e:
         shop.log_email_error('rounds enrol', e)
         r = None
-    r = r or {'balance': '1', 'card': base + '/#/rounds', 'share': base + '/#/rounds'}
+    r = r or {'balance': '1', 'halves': 2, 'card': base + '/#/rounds', 'share': base + '/#/rounds'}
     template = (ROOT / 'email' / 'welcome.html').read_text()
     html = (template.replace('{{SHOP_URL}}', base).replace('{{UNSUBSCRIBE_URL}}', link)
             .replace('{{ROUNDS_BALANCE}}', r['balance']).replace('{{ROUNDS_CARD_URL}}', r['card'])
-            .replace('{{ROUNDS_SHARE_URL}}', r['share']))
+            .replace('{{ROUNDS_SHARE_URL}}', r['share'])
+            .replace('{{ROUNDS_CARD_IMG}}', loyalty.card_img(r.get('halves', 2), r['card'])))
     shop.send_mail(email, 'Welcome to DocNova — 10% off + your first DocNova Round is on us',
                    'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code FIRSTSHIFT10 at checkout '
                    '(products only, delivery excluded; one discount code per order).\n\n'
@@ -228,6 +230,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.admin_reply(200, {'invoices': invoices.listing(), 'catalogue': invoices.catalogue_for_admin(),
                                           'sizes': list(shop.SIZES), 'bank_details_set': bool(invoices.bank_details()),
                                           'card_payments': shop.stripe_ready()})
+        if url.path == '/admin/api/sales':
+            return self.admin_reply(200, {'sales': returns.sales()})
+        if url.path == '/admin/api/order':
+            d = returns.summary(q.get('number', [''])[0].strip().upper())
+            return self.admin_reply(200, d) if d else self.admin_reply(404, {'message': 'Order not found.'})
         if url.path == '/admin/api/export.csv':
             raw = admin.csv_export().encode('utf-8-sig')
             self.send_response(200)
@@ -282,6 +289,14 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError('Unknown action.')
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
+            if path == '/admin/api/return':
+                try:
+                    r = returns.create(str(data.get('order_number') or '').upper(), data.get('items'), data.get('amount'),
+                                       str(data.get('method') or 'bank'), data.get('reason'), data.get('stripe_refund') is True,
+                                       data.get('notify') is True)
+                except shop.StripeError as e:
+                    return self.admin_reply(502, {'message': 'Stripe could not make the refund: ' + str(e)})
+                return self.admin_reply(200, r)
             if path == '/admin/api/note':
                 admin.save_note(data.get('email'), data.get('name'), data.get('note'))
                 return self.admin_reply(200, {'ok': True})

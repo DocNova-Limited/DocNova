@@ -284,7 +284,7 @@ async function roundsLink(e){e.preventDefault();const st=$('#rl-status'),email=$
  try{await roundsPost('/api/rounds/link',{email});st.classList.add('ok');st.textContent='If '+email+' is a DocNova Rounds member, a link to your card is on its way. Please check your inbox.'}
  catch(err){st.classList.add('err');st.textContent=err.message}}
 
-function roundsReason(h){return {join:'Welcome bonus',referral:'Colleague referral',order:'Order',reward:'Free set reward',refund:'Refund',adjust:'Adjustment'}[h.reason]||h.reason}
+function roundsReason(h){return {join:'Welcome bonus',referral:'Colleague referral',order:'Order',reward:'Free set reward',refund:'Refund',return:'Returned items',adjust:'Adjustment'}[h.reason]||h.reason}
 function roundsDate(ts){return ts?new Date(ts*1000).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):''}
 function roundsCopy(text,btn){const done=()=>{const t=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=t,1800)};if(navigator.clipboard)navigator.clipboard.writeText(text).then(done,()=>prompt('Copy this:',text));else prompt('Copy this:',text)}
 function roundsMember(d){const r=d.halves/2,goal=d.reward_at/2,left=Math.max(0,goal-r),link=location.origin+location.pathname+'#/rounds?ref='+d.ref_code;

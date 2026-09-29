@@ -13,7 +13,7 @@ SESSIONS = {}          # token -> expiry
 FAILS = {}             # ip -> [timestamps]
 PAID = ('paid', 'dispatched', 'delivered', 'partially_refunded')
 REASONS = {'join': 'Joining bonus', 'order': 'Order', 'referral': 'Referral bonus', 'reward': 'Free set issued',
-           'refund': 'Refund', 'adjust': 'Added by DocNova'}
+           'refund': 'Refund', 'return': 'Returned items', 'adjust': 'Added by DocNova'}
 
 def init_db():
     with shop._lock, shop.db() as conn:
@@ -118,7 +118,9 @@ def person_detail(email):
             lines = [('%d × %s' % (l.get('qty', 1), (cat.get(l.get('id')) or {}).get('name') or l.get('name') or l.get('id')))
                      for l in json.loads(r['items_json'] or '[]')]
             orders.append({'number': r['order_number'], 'paid_at': r['paid_at'], 'status': shop.STATUS_LABELS.get(r['status'], r['status']),
-                           'total_pence': r['total'] or 0, 'items': lines, 'coupon': r['coupon'] or ''})
+                           'total_pence': r['total'] or 0, 'items': lines, 'coupon': r['coupon'] or '',
+                           'refunded_pence': conn.execute('SELECT COALESCE(SUM(amount),0) FROM returns WHERE order_number=?', (r['order_number'],)).fetchone()[0]
+                           if conn.execute("SELECT 1 FROM sqlite_master WHERE name='returns'").fetchone() else 0})
         history = [{'at': r['created_at'], 'rounds': loyalty.fmt(r['halves']), 'halves': r['halves'],
                     'what': REASONS.get(r['reason'], r['reason']) + (' · ' + r['ref'].split(' #')[0] if r['ref'] else '')}
                    for r in conn.execute('SELECT * FROM rounds_ledger WHERE email=? ORDER BY id DESC', (email,))]
