@@ -21,6 +21,9 @@ services:
         value: /var/data
       - key: DOCNOVA_PUBLIC_URL
         value: https://docnova.co.uk
+      # 1 = online payment off (WhatsApp ordering) until Stripe is verified and live keys are in; set to "0" to open checkout
+      - key: DOCNOVA_CHECKOUT_PAUSED
+        value: "1"
       - key: GOOGLE_PLACE_ID
         value: ChIJsYc-YLZng2URQNsyBvUhTec
       # Private values — entered in the Render dashboard, never stored in GitHub:

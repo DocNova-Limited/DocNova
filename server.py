@@ -165,7 +165,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def checkout(self, data):
         if not shop.stripe_ready():
-            msg = ('Live Stripe keys are blocked until DOCNOVA_STRIPE_LIVE=1 is set.' if shop.stripe_mode() == 'blocked-live'
+            mode = shop.stripe_mode()
+            msg = ('Live Stripe keys are blocked until DOCNOVA_STRIPE_LIVE=1 is set.' if mode == 'blocked-live'
+                   else 'Online checkout opens very soon. To order today, message us on WhatsApp and we will arrange payment and delivery.' if mode == 'paused'
                    else 'Online payment is not switched on yet. Please try again soon.')
             return self.reply(503, {'message': msg})
         if limited(self.client_address[0], 'checkout', 10):
@@ -315,7 +317,7 @@ if __name__ == '__main__':
     if configured():
         send_pending_welcomes()
     mode = shop.stripe_mode()
-    print('Stripe: ' + {'off': 'not configured — checkout disabled (add STRIPE_SECRET_KEY to .env)',
+    print('Stripe: ' + {'paused': 'checkout PAUSED (DOCNOVA_CHECKOUT_PAUSED=1) — customers are offered WhatsApp ordering', 'off': 'not configured — checkout disabled (add STRIPE_SECRET_KEY to .env)',
                         'test': 'TEST mode — use Stripe test cards, no real money',
                         'live': 'LIVE mode — real payments',
                         'blocked-live': 'live key found but DOCNOVA_STRIPE_LIVE=1 is not set — checkout disabled'}[mode], flush=True)

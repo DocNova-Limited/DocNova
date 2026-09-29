@@ -60,7 +60,12 @@ def stripe_key():
     return os.getenv('STRIPE_SECRET_KEY', '').strip()
 
 def stripe_mode():
-    """'test', 'live', 'blocked-live' or 'off'. Live keys need DOCNOVA_STRIPE_LIVE=1 as a deliberate switch."""
+    """'test', 'live', 'blocked-live', 'paused' or 'off'. Live keys need DOCNOVA_STRIPE_LIVE=1 as a deliberate switch.
+
+    DOCNOVA_CHECKOUT_PAUSED=1 switches online payment off (e.g. the public site before Stripe is verified):
+    customers can still browse and are offered WhatsApp ordering instead."""
+    if os.getenv('DOCNOVA_CHECKOUT_PAUSED') == '1':
+        return 'paused'
     key = stripe_key()
     if not key:
         return 'off'
