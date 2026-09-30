@@ -405,11 +405,9 @@ def send_receipt(number):
     lead = ('<p style="margin:0 0 14px">Dear %s, thank you for choosing DocNova — we’ve received your payment of <strong style="color:#182130">%s</strong> for invoice '
             '<strong style="color:#182130">%s</strong>.</p>%s%s' % (_esc(_greet(inv['customer_name'])), shop.money(inv['total']), _esc(inv['number']), items,
             ('<p style="margin:0 0 14px;color:#182130;font-weight:600">%s</p>%s' % (_esc(progress), loyalty.card_img(loyalty.balance(inv['email']), card))) if progress else ''))
-    lead += shop.review_block_html(arrived=True)
     extra = ('<tr><td align="center" style="padding:0 30px 26px"><a href="%s" style="color:#004c9b;font:600 14px Arial">View my DocNova Rounds card</a></td></tr>' % _esc(card)) if card else ''
     text = 'Thank you, we have received your payment of %s for invoice %s.\n\n%s\n\nYour paid invoice: %s\n%s\nDocNova Ltd · Cambridge, UK\n' % (
         shop.money(inv['total']), inv['number'], progress, url, ('Your Rounds card: ' + card + '\n') if card else '')
-    text += shop.review_text(arrived=True)
     try:
         shop.send_mail(inv['email'], 'Thank you for your DocNova order — receipt ' + inv['number'], text,
                        _email_html(inv, base, 'Thank you for your order', lead, 'View / print your receipt', url, extra))

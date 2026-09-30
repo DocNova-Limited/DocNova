@@ -609,15 +609,12 @@ def send_order_email(order, kind):
                     'Click &amp; Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
                     if collect else 'We will email you again with a tracking number as soon as it is dispatched.',
                     ('<p style="margin:18px 0 12px;color:#182130;font-weight:600">%s</p>%s' % (escape(line), loyalty.card_img(loyalty.balance(loyalty.norm(order['email'])), card))) if line else ''))
-        lead += review_block_html(arrived=collect)
-        text += review_text(arrived=collect)
         html_body = invoices._email_html(None, base, 'Your order is confirmed', lead, 'Track your order', track)
     else:
         subject = 'Your DocNova order ' + order['order_number'] + ' is on its way'
         text = ('Good news: your order has been dispatched.\n\nOrder number: %s\nCarrier: %s\nTracking number: %s\n%s\n'
                 'Track your order: %s\n' % (order['order_number'], order['carrier'] or '-', order['tracking_number'] or '-',
                                             ('Carrier tracking: ' + order['tracking_url'] + '\n') if order['tracking_url'] else '', track))
-        text += review_text(arrived=False)
     try:
         send_mail(order['email'], subject, text, html_body if kind == 'confirmation' else None)
     except Exception as e:

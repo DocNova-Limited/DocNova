@@ -2,13 +2,14 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices, returns, guard, inventory, partners
+import shop, loyalty, admin, invoices, returns, guard, inventory, partners, reviews
 from shop import ROOT, DB
 
 shop.init_db()
 admin.init_db()
 invoices.init_db()
 returns.init_db()
+reviews.init_db()
 RATE = {}
 ORDER_RE = re.compile(r'DN-\d{6}-[A-Z0-9]{5}')
 
@@ -523,6 +524,7 @@ if __name__ == '__main__':
     print('Email mode: ' + ('SMTP enabled' if configured() else 'local pending signups — email sending not configured'), flush=True)
     if configured():
         send_pending_welcomes()
+        reviews.start()   # one gentle Google review request per order, a few days after they have it
     mode = shop.stripe_mode()
     print('Stripe: ' + {'paused': 'checkout PAUSED (DOCNOVA_CHECKOUT_PAUSED=1) — customers are offered WhatsApp ordering', 'off': 'not configured — checkout disabled (add STRIPE_SECRET_KEY to .env)',
                         'test': 'TEST mode — use Stripe test cards, no real money',
