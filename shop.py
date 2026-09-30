@@ -131,7 +131,11 @@ def coupon_info(code):
         import loyalty
         return loyalty.reward_info(code)
     spec = COUPONS.get(code)
-    return {'code': code, 'percent_off': spec['percent_off']} if spec else None
+    if spec:
+        return {'code': code, 'percent_off': spec['percent_off']}
+    import partners                          # single-use partner codes (e.g. Student Beans)
+    i = partners.info(code)
+    return {'code': i['code'], 'percent_off': i['percent_off']} if i else None
 
 def delivery_price(method, subtotal):
     d = DELIVERY[method]
@@ -166,9 +170,15 @@ def price_cart(raw_items, coupon='', delivery='uk'):
         if not loyalty.reward_info(code):
             raise ValueError('That DocNova Rounds code has already been used or has expired.')
         discount = loyalty.reward_discount(lines)
+    elif code in COUPONS:
+        discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100  # round half up, like the site
     else:
-        code = code if code in COUPONS else ''
-        discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100 if code else 0  # round half up, like the site
+        import partners                     # single-use partner code (e.g. Student Beans): checked again here
+        i = partners.info(code) if code else None
+        if code and not i and '-' in code:
+            raise ValueError('That student discount code has already been used or is no longer valid.')
+        code = i['code'] if i else ''
+        discount = (subtotal * i['percent_off'] + 50) // 100 if i else 0
     method = delivery if delivery in DELIVERY else None
     if not method:
         raise ValueError('Please choose a delivery option.')
@@ -208,6 +218,8 @@ def init_db():
     os.chmod(DB, 0o600)
     import loyalty                        # DocNova Rounds tables
     loyalty.init_db()
+    import partners
+    partners.init_db()
 
 def new_order_number():
     return 'DN-' + time.strftime('%y%m%d') + '-' + ''.join(secrets.choice(ORDER_ALPHABET) for _ in range(5))
@@ -326,7 +338,12 @@ def ensure_reward_coupon(code, amount):
 
 def ensure_coupon(code):
     """Create the Stripe coupon behind a site discount code the first time it is used."""
-    spec = COUPONS[code]
+    spec = COUPONS.get(code)
+    if not spec:
+        import partners
+        spec = partners.stripe_coupon_spec(code)
+        if not spec:
+            raise ValueError('That discount code is no longer valid.')
     try:
         return stripe_request('GET', '/v1/coupons/' + spec['stripe_id'])['id']
     except StripeError as e:
@@ -432,6 +449,11 @@ def sync_from_session(session, event_type=None):
             loyalty.earn_from_order(order)          # DocNova Rounds (safe to repeat)
         except Exception as e:
             log_email_error('rounds for ' + order['order_number'], e)
+        try:
+            import partners
+            partners.redeem(order)                   # a student discount code is used up once its order is paid
+        except Exception as e:
+            log_email_error('partner code for ' + order['order_number'], e)
     if order['status'] == 'paid' and not order['confirmation_sent']:
         send_order_email(order, 'confirmation')
     return order

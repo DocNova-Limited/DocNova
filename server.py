@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices, returns, guard, inventory
+import shop, loyalty, admin, invoices, returns, guard, inventory, partners
 from shop import ROOT, DB
 
 shop.init_db()
@@ -240,6 +240,20 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == '/admin/api/order':
             d = returns.summary(q.get('number', [''])[0].strip().upper())
             return self.admin_reply(200, d) if d else self.admin_reply(404, {'message': 'Order not found.'})
+        if url.path == '/admin/api/partners':
+            return self.admin_reply(200, partners.summary())
+        if url.path == '/admin/api/partner-codes.csv':
+            try:
+                b, text = partners.batch_csv(q.get('batch', [''])[0])
+            except ValueError as e:
+                return self.admin_reply(404, {'message': str(e)})
+            raw = text.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv; charset=utf-8')
+            self.send_header('Content-Disposition', 'attachment; filename="docnova-%s-%d-percent-codes-%s.csv"' % (b['partner'].lower().replace(' ', '-'), b['percent'], b['id']))
+            self.admin_headers()
+            self.end_headers()
+            return self.wfile.write(raw)
         if url.path == '/admin/api/export.csv':
             raw = admin.csv_export().encode('utf-8-sig')
             self.send_response(200)
@@ -310,6 +324,10 @@ class Handler(SimpleHTTPRequestHandler):
                 except shop.StripeError as e:
                     return self.admin_reply(502, {'message': 'Stripe could not make the refund: ' + str(e)})
                 return self.admin_reply(200, r)
+            if path == '/admin/api/partner-batch':
+                return self.admin_reply(200, partners.create_batch(data.get('partner'), data.get('percent'), data.get('size'), data.get('note')))
+            if path == '/admin/api/partner-batch/active':
+                return self.admin_reply(200, partners.set_active(data.get('id'), data.get('active') is True))
             if path == '/admin/api/note':
                 admin.save_note(data.get('email'), data.get('name'), data.get('note'))
                 return self.admin_reply(200, {'ok': True})

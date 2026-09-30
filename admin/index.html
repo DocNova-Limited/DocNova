@@ -109,7 +109,7 @@ button.big{padding:15px 22px;font-size:15px}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
   <div id="tab-stock" hidden>
     <div class="help"><strong>Stock is kept as individual pieces and updates itself.</strong> Every paid sale (website or invoice) takes the pieces off; returned items go back on. (If a set is sold, its top and its trousers are each taken off.) You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
     <div class="stats" id="stockStats"></div>
@@ -119,6 +119,19 @@ button.big{padding:15px 22px;font-size:15px}
     <div id="stockBody"></div>
     <h3 class="sub">Medical devices</h3><div id="stockDevices"></div>
     <h3 class="sub">Stock history</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Date</th><th>What happened</th><th>Customer</th><th>Items</th><th class="num">Pieces</th></tr></thead><tbody id="stockHistory"></tbody></table></div>
+  </div>
+  <div id="tab-partners" hidden>
+    <div class="help"><strong>Student discount codes (Student Beans).</strong> Each code works <strong>once</strong>, for one order, and gives the discount on the items (not delivery). Make a batch here, press <em>Download codes</em> and upload the file to your Student Beans account. Student Beans checks the customer is a student and gives them one code. Codes only count as used once the order is paid. If you ever stop the partnership, press <em>Switch off</em> and the unused codes stop working straight away.</div>
+    <div class="stats" id="ptStats"></div>
+    <section class="card" style="margin-bottom:16px"><h3 style="margin:0 0 10px">Make a new batch of codes</h3>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <label style="margin:0">Partner<br><select id="ptPartner"><option>Student Beans</option></select></label>
+        <label style="margin:0">Discount (%)<br><input id="ptPercent" type="number" min="5" max="50" value="15" style="width:90px"></label>
+        <label style="margin:0">How many codes<br><input id="ptSize" type="number" min="1" max="5000" value="500" style="width:110px"></label>
+        <button type="button" class="gold" id="ptMake">Make codes</button></div>
+      <p id="ptMsg" class="msg"></p></section>
+    <h3 class="sub">Batches</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Made</th><th>Batch</th><th>Partner</th><th class="num">Discount</th><th class="num">Codes</th><th class="num">Used</th><th>Status</th><th>Actions</th></tr></thead><tbody id="ptBatches"></tbody></table></div>
+    <h3 class="sub">Orders with a student code</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Code</th><th class="num">Discount</th><th class="num">Paid</th></tr></thead><tbody id="ptUsed"></tbody></table></div>
   </div>
   <div id="tab-approvals" hidden>
     <div class="help"><strong>Nothing is given away without you.</strong> Free sets wait here until you approve them — the customer only receives their code after you press <em>Approve</em>. Referrals that look suspicious (same name, phone, address or email as the referrer or an existing customer) are held here too, and info@docnova.co.uk gets an email about each one.</div>
@@ -308,7 +321,8 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock';
+  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock'; $('#tab-partners').hidden = b.dataset.tab !== 'partners';
+  if (b.dataset.tab === 'partners') loadPartners();
   if (b.dataset.tab === 'stock') loadStock();
   if (b.dataset.tab === 'approvals') loadApprovals();
   if (b.dataset.tab === 'invoices') loadInvoices();
@@ -569,6 +583,34 @@ async function decideReview(r, approve) {
   catch (e) { alert(e.message); }
   loadApprovals(); load();
 }
+// ---------------------------------------------------------------- student discount (partner codes)
+async function loadPartners() {
+  let d; try { d = await api('partners'); } catch (e) { return; }
+  const codes = d.batches.filter(b => b.active).reduce((a, b) => a + b.size - b.used, 0);
+  const sales = d.used.filter(u => u.total != null).reduce((a, u) => a + u.total, 0);
+  $('#ptStats').replaceChildren(
+    stat('Unused codes ready', String(codes)), stat('Codes used', String(d.used.length)), stat('Paid by students', gbp(sales)));
+  $('#ptBatches').replaceChildren(...(d.batches.length ? d.batches.map(b => el('tr', {},
+    el('td', {}, day(b.created_at)), el('td', {}, b.id), el('td', {}, b.partner), el('td', {class: 'num'}, b.percent + '%'),
+    el('td', {class: 'num'}, String(b.size)), el('td', {class: 'num'}, String(b.used)),
+    el('td', {}, el('span', {class: 'pill ' + (b.active ? 'ok' : 'bad')}, b.active ? 'Working' : 'Switched off')),
+    el('td', {class: 'acts'}, el('a', {class: 'ghost', style: 'color:var(--navy)', href: '/admin/api/partner-codes.csv?batch=' + encodeURIComponent(b.id)}, 'Download codes'), ' ',
+      el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => {
+        if (!confirm((b.active ? 'Switch off' : 'Switch back on') + ' the unused codes in batch ' + b.id + '?')) return;
+        try { await api('partner-batch/active', {id: b.id, active: !b.active}); } catch (e) { alert(e.message); } loadPartners(); }}, b.active ? 'Switch off' : 'Switch on')))) :
+    [el('tr', {}, el('td', {colspan: 8, class: 'muted'}, 'No codes yet. Make your first batch above.'))]));
+  $('#ptUsed').replaceChildren(...(d.used.length ? d.used.map(u => el('tr', {},
+    el('td', {}, day(u.redeemed_at)), el('td', {}, u.redeemed_order), el('td', {}, u.customer_name || u.email || '—'), el('td', {}, u.code),
+    el('td', {class: 'num'}, u.discount != null ? '−' + gbp(u.discount) : '—'), el('td', {class: 'num'}, u.total != null ? gbp(u.total) : '—'))) :
+    [el('tr', {}, el('td', {colspan: 6, class: 'muted'}, 'No student orders yet.'))]));
+}
+$('#ptMake').addEventListener('click', async () => {
+  const m = $('#ptMsg'); m.className = 'msg'; m.textContent = 'Making codes…';
+  try { const r = await api('partner-batch', {partner: $('#ptPartner').value, percent: +$('#ptPercent').value, size: +$('#ptSize').value});
+    m.className = 'msg ok'; m.textContent = r.size + ' codes made (batch ' + r.id + '). Press “Download codes” below to get the file for Student Beans.'; }
+  catch (e) { m.className = 'msg bad'; m.textContent = e.message; }
+  loadPartners();
+});
 // ---------------------------------------------------------------- stock
 let STOCK = null, stockFit = 'All', stockEditing = false;
 const LVCLS = {ok: 'ok', '50': 'l50', '25': 'l25', '10': 'l10', out: 'out', none: 'none'};
