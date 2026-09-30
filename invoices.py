@@ -20,6 +20,11 @@ def init_db():
             lines_json TEXT NOT NULL, subtotal INTEGER NOT NULL, discount INTEGER NOT NULL DEFAULT 0, delivery INTEGER NOT NULL DEFAULT 0,
             total INTEGER NOT NULL, note TEXT, status TEXT NOT NULL, paid_at INTEGER, paid_method TEXT, order_number TEXT,
             pay_session TEXT, sent_at INTEGER, source TEXT DEFAULT 'admin')''')
+        cols = {r[1] for r in conn.execute('PRAGMA table_info(invoices)')}
+        if 'discount_pct' not in cols:        # % discount from a code (the code itself is kept for our records only)
+            conn.execute('ALTER TABLE invoices ADD COLUMN discount_pct INTEGER')
+        if 'coupon' not in cols:
+            conn.execute('ALTER TABLE invoices ADD COLUMN coupon TEXT')
 
 def _get(number=None, token=None):
     with shop.db() as conn:
@@ -96,6 +101,15 @@ def create(data):
         lines.append({'id': p['id'], 'name': p['name'], 'size': size, 'qty': qty, 'unit_pence': unit})
     subtotal = sum(l['unit_pence'] * l['qty'] for l in lines)
     discount = min(_pence(data.get('discount'), 'Discount'), subtotal)
+    code, pct = str(data.get('code') or '').strip().upper(), None
+    if code:
+        if code.startswith('ROUNDS-'):
+            raise ValueError('A DocNova Rounds free-set code can only be used on the website.')
+        info = shop.coupon_info(code)
+        if not info:
+            raise ValueError('That discount code is not recognised (or has already been used).')
+        code, pct = info['code'], int(info['percent_off'])
+        discount = (subtotal * pct + 50) // 100          # on the items, not delivery — exactly like the website
     delivery = _pence(data.get('delivery'), 'Delivery')
     total = subtotal - discount + delivery
     paid = data.get('already_paid') is True
@@ -122,11 +136,11 @@ def create(data):
                 raise ValueError('Invoice ' + keep + ' has already been added.')
             number = keep
         conn.execute('INSERT INTO invoices (number, token, created_at, issue_date, due_at, customer_name, email, phone, address, lines_json, '
-                     'subtotal, discount, delivery, total, note, status, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                     'subtotal, discount, delivery, total, note, status, source, discount_pct, coupon) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                      (number, secrets.token_urlsafe(24), now, issue, issue + due_days * 86400, name, email or None,
                       str(data.get('phone') or '').strip()[:40] or None, str(data.get('address') or '').strip()[:300] or None,
                       json.dumps(lines), subtotal, discount, delivery, total, str(data.get('note') or '').strip()[:500] or None,
-                      'unpaid', str(data.get('source') or 'admin')[:20]))
+                      'unpaid', str(data.get('source') or 'admin')[:20], pct, code or None))
     if name and email:
         _remember_name(email, name)
     if paid:
@@ -168,9 +182,14 @@ def mark_paid(number, method, when=None, notify=True, payment_intent=None):
                       'Invoice ' + number + ' · ' + method))
         if payment_intent:
             conn.execute('UPDATE orders SET payment_intent_id=? WHERE order_number=?', (payment_intent, order_number))
+        if inv.get('coupon'):
+            conn.execute('UPDATE orders SET coupon=? WHERE order_number=?', (inv['coupon'], order_number))
         conn.execute("UPDATE invoices SET status='paid', paid_at=?, paid_method=?, order_number=? WHERE number=? AND status<>'paid'",
                      (when, method, order_number, number))
     order = shop.get_order(order_number)
+    if inv.get('coupon'):
+        import partners
+        partners.redeem(order)                    # a single-use student code is used up once paid
     if not inv['email']:
         try:
             import inventory
@@ -289,7 +308,7 @@ def page(inv, base, just_paid=False):
         thanks = '<div class="ok noprint">Thank you — we are confirming your payment. This page updates in a few seconds.</div><script>setTimeout(()=>location.replace(location.pathname),4000)</script>'
     totals = '<tr><td colspan="3">Subtotal</td><td class="n">%s</td></tr>' % shop.money(inv['subtotal'])
     if inv['discount']:
-        totals += '<tr><td colspan="3">Discount</td><td class="n">−%s</td></tr>' % shop.money(inv['discount'])
+        totals += '<tr class="disc"><td colspan="3">%s</td><td class="n">−%s</td></tr>' % (discount_label(inv), shop.money(inv['discount']))
     if inv['delivery']:
         totals += '<tr><td colspan="3">Delivery</td><td class="n">%s</td></tr>' % shop.money(inv['delivery'])
     totals += '<tr class="t"><td colspan="3">%s</td><td class="n">%s</td></tr>' % ('Total paid' if status == 'paid' else 'Total due', shop.money(inv['total']))
@@ -319,6 +338,10 @@ th{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}.n
 .btn{display:inline-block;background:#d9b97f;color:#101826;font-weight:700;text-decoration:none;padding:13px 22px}
 .stamp{display:inline-block;transform:rotate(-4deg);border:3px solid;padding:6px 14px;font:700 18px Arial;letter-spacing:.12em;margin:0 0 18px}
 .paid{color:#1d7a46}.void{color:#b42318}.ok{max-width:760px;margin:16px auto 0;background:#e5f3ea;color:#1d7a46;padding:12px 16px;font-weight:600}
+.disc td{color:#1d7a46}.save{margin:14px 0 0;text-align:right;color:#1d7a46;font-weight:600}
+.rounds{margin-top:24px;display:flex;gap:22px;align-items:center;flex-wrap:wrap;background:#faf8f3;border:1px solid #ece6da;padding:18px}
+.rounds img{width:240px!important;max-width:100%%!important;border-radius:12px!important;display:block}.rounds div{flex:1;min-width:220px}.rounds .big{font:22px/1.25 Georgia,serif;color:#182130;margin:2px 0 6px}
+@media print{.rounds{break-inside:avoid}}
 .foot{border-top:1px solid #ece9e3;padding:16px 32px;font-size:12px;color:#8a909a;text-align:center}
 .print{max-width:760px;margin:0 auto 30px;text-align:right}.print button{font:600 14px Arial;padding:10px 16px;border:1px solid #182130;background:#fff;cursor:pointer}
 @media print{body{background:#fff}.noprint,.print{display:none}.doc{border:0;margin:0}}
@@ -329,7 +352,7 @@ th{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}.n
 <div><h3>Bill to</h3>%(cname)s%(cemail)s%(cphone)s%(caddr)s</div>
 <div><h3>Invoice</h3><strong>%(num)s</strong><br>Date: %(date)s%(due)s</div></div>
 %(stamp)s<table><tr><th>Item</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Amount</th></tr>%(rows)s%(totals)s</table>
-%(note)s%(pay)s</div>
+%(save)s%(rounds)s%(note)s%(pay)s</div>
 <div class="foot">Thank you for choosing DocNova — premium scrubs and medical essentials for the people who care for others.<br>
 Every DocNova scrub set earns a DocNova Round · collect 10 for a free set · %(base_host)s</div></div>
 <div class="print noprint"><button onclick="print()">Print or save as PDF</button></div></body></html>''' % {
@@ -338,7 +361,47 @@ Every DocNova scrub set earns a DocNova Round · collect 10 for a free set · %(
         'caddr': '<br>' + _esc(inv['address']).replace('\n', '<br>') if inv['address'] else '', 'date': day(inv['issue_date']),
         'due': ('<br>Due: ' + day(inv['due_at'])) if status == 'unpaid' and inv['due_at'] else '', 'rows': rows, 'totals': totals,
         'note': '<p class="m" style="margin-top:16px">%s</p>' % _esc(inv['note']) if inv['note'] else '', 'pay': pay,
+        'save': ('<p class="save">You save %s on this order.</p>' % shop.money(inv['discount'])) if inv['discount'] and status != 'cancelled' else '',
+        'rounds': rounds_box(inv),
         'base_host': _esc(re.sub(r'^https?://', '', base))}
+
+def discount_label(inv):
+    return 'Discount — %d%% off' % inv['discount_pct'] if inv.get('discount_pct') else 'Discount'
+
+def rounds_outlook(inv):
+    """(earned by this invoice, card total after it, rounds to go) in half-rounds — or None."""
+    if not inv.get('email') or inv['status'] == 'cancelled':
+        return None
+    earn = loyalty.order_halves({'items_json': inv['lines_json'], 'coupon': None})
+    email = inv['email']
+    if inv['status'] == 'paid':
+        after = loyalty.balance(email)
+    else:
+        with shop.db() as conn:
+            joined = conn.execute("SELECT 1 FROM rounds_ledger WHERE email=? AND reason='join'", (email,)).fetchone()
+        after = loyalty.balance(email) + earn + (0 if joined else loyalty.JOIN_BONUS)
+    return earn, after, max(loyalty.REWARD_AT - after, 0)
+
+def rounds_text(inv):
+    o = rounds_outlook(inv)
+    if not o or not o[0]:
+        return ''
+    earn, after, left = o
+    f = loyalty.fmt
+    head = ('This order earned %s DocNova Round%s.' if inv['status'] == 'paid' else 'This order adds %s DocNova Round%s once paid.') % (f(earn), '' if earn <= 2 else 's')
+    tail = ('%s of 10 rounds on your card — %s to go until your next scrub set is free.' % (f(after), f(left)) if left
+            else '%s rounds on your card — your next scrub set is free!' % f(after))
+    if inv['status'] != 'paid':
+        tail = 'Once paid: ' + tail
+    return head, tail
+
+def rounds_box(inv):
+    t = rounds_text(inv)
+    if not t:
+        return ''
+    o = rounds_outlook(inv)
+    return ('<div class="rounds">%s<div><h3>DocNova Rounds</h3><p class="big">%s</p><p class="m" style="margin:0">%s Every scrub set earns 1 round; '
+            'every top, pair of trousers or medical device ½ round.</p></div></div>' % (loyalty.card_img(o[1]), _esc(t[1]), _esc(t[0])))
 
 def _greet(name):
     """'Dr. Abiola Kehinde' -> 'Dr Kehinde'; 'Sarah Khan' -> 'Sarah'; a company name stays as it is."""
@@ -359,6 +422,16 @@ def _email_html(inv, base, heading, lead, button, url, extra=''):
             '<tr><td style="border-top:1px solid #ece9e3;padding:18px 30px;font:12px/1.6 Arial;color:#8a909a;text-align:center">DocNova Ltd · Registered in England &amp; Wales No. 16502835 · Cambridge, UK</td></tr>'
             '</table></td></tr></table></body></html>' % (_esc(base), _esc(heading), lead, _esc(url), _esc(button), extra))
 
+def _email_extras(inv):
+    out = ''
+    if inv['discount']:
+        out += ('<p style="margin:14px 0 0">Items <s>%s</s> &nbsp;·&nbsp; <strong style="color:#1d7a46">%s — you save %s</strong></p>'
+                % (shop.money(inv['subtotal']), _esc(discount_label(inv)), shop.money(inv['discount'])))
+    t = rounds_text(inv)
+    if t:
+        out += '<p style="margin:14px 0 0;color:#182130;font-weight:600">%s %s</p>' % (_esc(t[0]), _esc(t[1]))
+    return out
+
 def send(number):
     inv = get(number)
     if not inv or not inv['email'] or inv['status'] != 'unpaid':
@@ -371,9 +444,9 @@ def send(number):
     due = time.strftime('%d %B %Y', time.localtime(inv['due_at'])) if inv['due_at'] else ''
     lead = ('<p style="margin:0 0 14px">Hi %s, thank you for your DocNova order. Your invoice <strong style="color:#182130">%s</strong> for '
             '<strong style="color:#182130">%s</strong> is ready%s.</p><p style="margin:0">You can pay by bank transfer (details on the invoice) '
-            '%s. Once it’s paid, your purchase is added to your DocNova Rounds card automatically.</p>'
+            '%s. Once it’s paid, your purchase is added to your DocNova Rounds card automatically.</p>%s'
             % (_esc(first), _esc(inv['number']), shop.money(inv['total']), (' — due by ' + due) if due else '',
-               'or by card from the invoice page' if card_link(inv, base) else ''))
+               'or by card from the invoice page' if card_link(inv, base) else '', _email_extras(inv)))
     text = ('Hi %s,\n\nThank you for your DocNova order. Invoice %s for %s is ready%s.\n\nView and pay your invoice: %s\n\n%s'
             'Once it is paid, your purchase is added to your DocNova Rounds card automatically.\n\nDocNova Ltd · Cambridge, UK\n'
             % (first, inv['number'], shop.money(inv['total']), (', due by ' + due) if due else '', url,
@@ -400,8 +473,9 @@ def send_receipt(number):
                    % (l['qty'], _esc(l['name']), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % _esc(l['size']),
                       shop.money(l['unit_pence'] * l['qty'])) for l in json.loads(inv['lines_json']))
     items = ('<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130;margin:0 0 18px">%s'
-             '<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td align="right" style="padding:8px 0;font-weight:700">%s</td></tr></table>'
-             % (rows, shop.money(inv['total'])))
+             '%s<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td align="right" style="padding:8px 0;font-weight:700">%s</td></tr></table>'
+             % (rows, ('<tr><td style="padding:7px 0;color:#1d7a46">%s</td><td align="right" style="padding:7px 0;color:#1d7a46">−%s</td></tr>'
+                       % (_esc(discount_label(inv)), shop.money(inv['discount']))) if inv['discount'] else '', shop.money(inv['total'])))
     lead = ('<p style="margin:0 0 14px">Dear %s, thank you for choosing DocNova — we’ve received your payment of <strong style="color:#182130">%s</strong> for invoice '
             '<strong style="color:#182130">%s</strong>.</p>%s%s' % (_esc(_greet(inv['customer_name'])), shop.money(inv['total']), _esc(inv['number']), items,
             ('<p style="margin:0 0 14px;color:#182130;font-weight:600">%s</p>%s' % (_esc(progress), loyalty.card_img(loyalty.balance(inv['email']), card))) if progress else ''))

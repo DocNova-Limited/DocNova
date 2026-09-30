@@ -434,6 +434,26 @@ function newInvoice() {
   const due = inp({type: 'number', min: 0, max: 90, value: 7});
   const discount = inp({type: 'number', min: 0, step: '0.01', value: 0}), delivery = inp({type: 'number', min: 0, step: '0.01', value: 0});
   const note = inp({type: 'text', maxlength: 500, placeholder: 'optional note printed on the invoice'});
+  // discount code (e.g. VVIP25, FRONTLINE15): the invoice shows "Discount — 25% off", never the code itself
+  let codePct = 0, codeName = '';
+  const codeIn = inp({type: 'text', maxlength: 30, placeholder: 'e.g. VVIP25', style: 'text-transform:uppercase', autocomplete: 'off'});
+  const codeMsg = el('div', {class: 'muted', style: 'margin-top:6px'});
+  const codeBtn = el('button', {type: 'button', class: 'ghost', onclick: async () => {
+    if (codePct) { codePct = 0; codeName = ''; codeIn.value = ''; codeIn.disabled = false; codeBtn.textContent = 'Apply'; codeMsg.textContent = ''; discount.disabled = false; calc(); return; }
+    const c = codeIn.value.trim().toUpperCase(); if (!c) return;
+    codeMsg.style.color = ''; codeMsg.textContent = 'Checking…';
+    try {
+      const r = await fetch('/api/coupon', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code: c})});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.percent_off) throw new Error(j.message || 'That code is not recognised.');
+      if (String(j.code).startsWith('ROUNDS-')) throw new Error('A free-set Rounds code can only be used on the website.');
+      codePct = +j.percent_off; codeName = j.code; codeIn.value = j.code; codeIn.disabled = true; codeBtn.textContent = 'Remove';
+      discount.value = 0; discount.disabled = true;
+      codeMsg.style.color = '#1d7a46'; codeMsg.textContent = '✓ ' + codePct + '% off the items applied. The invoice will show “Discount — ' + codePct + '% off” (the code itself is not shown).';
+      calc();
+    } catch (e) { codeMsg.style.color = '#b42318'; codeMsg.textContent = e.message; }
+  }}, 'Apply');
+  codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); codeBtn.click(); } });
   const orig = inp({type: 'text', maxlength: 20, placeholder: 'only for old invoices, e.g. INV-000786'});
   const payBox = el('div', {});
   function drawPay() {
@@ -445,7 +465,8 @@ function newInvoice() {
           el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Date paid'), pdate), el('div', {})),
           el('label', {class: 'check'}, receipt, el('span', {}, 'Email the customer their paid receipt (with their DocNova Rounds card)')))
         : el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Days to pay'), due), el('div', {})),
-      el('details', {style: 'margin-top:12px'}, el('summary', {class: 'muted', style: 'cursor:pointer'}, 'More options (discount, delivery, note)'),
+      el('label', {}, 'Discount code'), el('div', {style: 'display:flex;gap:8px;align-items:center;max-width:420px'}, codeIn, codeBtn), codeMsg,
+      el('details', {style: 'margin-top:12px'}, el('summary', {class: 'muted', style: 'cursor:pointer'}, 'More options (discount in £, delivery, note)'),
         el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Discount £ (whole sale)'), discount), el('div', {}, el('label', {}, 'Delivery £'), delivery)),
         el('label', {}, 'Note'), note, el('label', {}, 'Original invoice number'), orig));
     go.textContent = mode === 'unpaid' ? 'Create & email invoice' : (receipt.checked && email.value ? 'Save sale & email receipt' : 'Save sale');
@@ -454,9 +475,10 @@ function newInvoice() {
   receipt.addEventListener('change', drawPay); email.addEventListener('input', () => { if (mode === 'paid') go.textContent = receipt.checked && email.value ? 'Save sale & email receipt' : 'Save sale'; calc(); });
   function calc() {
     const sub = items.reduce((a, l) => a + Math.round((+l.price || 0) * 100) * l.qty, 0);
-    const d = Math.min(Math.round((+discount.value || 0) * 100), sub), dl = Math.round((+delivery.value || 0) * 100);
+    const d = codePct ? Math.round(sub * codePct / 100) : Math.min(Math.round((+discount.value || 0) * 100), sub), dl = Math.round((+delivery.value || 0) * 100);
     const rounds = items.reduce((a, l) => { const c = byId[l.id]?.category; return a + ((+l.price || 0) > 0 ? (c === 'Sets' ? 1 : (c === 'Tops' || c === 'Pants' || c === 'Medical Devices') ? .5 : 0) : 0) * l.qty; }, 0);
-    totals.replaceChildren(d ? el('div', {class: 'tot'}, el('span', {}, 'Discount'), el('span', {}, '−' + gbp(d))) : '',
+    totals.replaceChildren(d ? el('div', {class: 'tot'}, el('span', {}, 'Items'), el('span', {}, gbp(sub))) : '',
+      d ? el('div', {class: 'tot'}, el('span', {}, codePct ? 'Discount — ' + codePct + '% off' : 'Discount'), el('span', {style: 'color:#1d7a46'}, '−' + gbp(d))) : '',
       dl ? el('div', {class: 'tot'}, el('span', {}, 'Delivery'), el('span', {}, gbp(dl))) : '',
       el('div', {class: 'tot big'}, el('span', {}, 'Total'), el('span', {}, gbp(sub - d + dl))),
       el('p', {class: 'muted', style: 'margin:6px 0 0'}, email.value ? 'Adds ' + rounds + ' DocNova round' + (rounds === 1 ? '' : 's') + ' to their card' + (mode === 'unpaid' ? ' once paid.' : '.') : 'Add their email so the sale counts towards DocNova Rounds.'));
@@ -470,7 +492,7 @@ function newInvoice() {
     try {
       const paid = mode === 'paid';
       const r = await api('invoice/create', {name: name.value, email: email.value, phone: phone.value, address: addr.value,
-        lines: items.map(i => ({id: i.id, size: i.size, qty: i.qty, price: i.price})), discount: discount.value, delivery: delivery.value,
+        lines: items.map(i => ({id: i.id, size: i.size, qty: i.qty, price: i.price})), discount: codePct ? 0 : discount.value, code: codePct ? codeName : '', delivery: delivery.value,
         due_days: due.value, note: note.value, already_paid: paid, paid_method: method, paid_date: pdate.value, receipt: paid && receipt.checked,
         number: orig.value.trim(), source: orig.value.trim() ? 'import' : 'admin'});
       close(); await loadInvoices(); load();
