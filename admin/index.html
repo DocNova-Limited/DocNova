@@ -250,7 +250,7 @@ async function open(email) {
       el('div', {style: 'font-size:14px;color:#c9d0db'}, s.halves >= 20 ? 'Free set due — approve it under Approvals.' : s.to_go + ' rounds to go until a free scrub set.',
         s.member ? '' : ' · Not joined yet'))),
     el('section', {class: 'card'}, el('h3', {}, 'Add rounds for earlier purchases'),
-      el('p', {class: 'muted', style: 'margin:0'}, 'Enter what they bought before. 1 set = 1 round · 1 top or trousers = ½ round.'),
+      el('p', {class: 'muted', style: 'margin:0'}, 'Enter what they bought before. 1 set = 1 round · 1 top, trousers or medical device = ½ round.'),
       el('div', {class: 'grid3'}, el('div', {}, el('label', {}, 'Scrub sets'), sets), el('div', {}, el('label', {}, 'Tops'), tops), el('div', {}, el('label', {}, 'Trousers'), trs)),
       el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Rounds to add (use minus to remove)'), rounds), el('div', {}, el('label', {}, 'Reason (customer sees this)'), reason)),
       el('label', {class: 'check'}, joining, el('span', {}, 'Also give the 1-round joining bonus (only once per person)')),
@@ -403,7 +403,7 @@ function newInvoice() {
   function calc() {
     const sub = items.reduce((a, l) => a + Math.round((+l.price || 0) * 100) * l.qty, 0);
     const d = Math.min(Math.round((+discount.value || 0) * 100), sub), dl = Math.round((+delivery.value || 0) * 100);
-    const rounds = items.reduce((a, l) => { const c = byId[l.id]?.category; return a + ((+l.price || 0) > 0 ? (c === 'Sets' ? 1 : (c === 'Tops' || c === 'Pants') ? .5 : 0) : 0) * l.qty; }, 0);
+    const rounds = items.reduce((a, l) => { const c = byId[l.id]?.category; return a + ((+l.price || 0) > 0 ? (c === 'Sets' ? 1 : (c === 'Tops' || c === 'Pants' || c === 'Medical Devices') ? .5 : 0) : 0) * l.qty; }, 0);
     totals.replaceChildren(d ? el('div', {class: 'tot'}, el('span', {}, 'Discount'), el('span', {}, '−' + gbp(d))) : '',
       dl ? el('div', {class: 'tot'}, el('span', {}, 'Delivery'), el('span', {}, gbp(dl))) : '',
       el('div', {class: 'tot big'}, el('span', {}, 'Total'), el('span', {}, gbp(sub - d + dl))),
@@ -467,7 +467,7 @@ async function returnDialog(number) {
   const reason = el('input', {type: 'text', maxlength: 300, placeholder: 'e.g. wrong size, exchanged for L'});
   const notify = el('input', {type: 'checkbox', checked: !!d.email});
   const info = el('p', {class: 'muted', style: 'margin:10px 0 0'}), msg = el('p', {class: 'msg'});
-  const halves = () => rows.reduce((a, r) => { const c = cat[r.l.id]?.category; return a + (r.l.unit_pence > 0 ? (c === 'Sets' ? 2 : (c === 'Tops' || c === 'Pants') ? 1 : 0) : 0) * (+r.qty.value || 0); }, 0);
+  const halves = () => rows.reduce((a, r) => { const c = cat[r.l.id]?.category; return a + (r.l.unit_pence > 0 ? (c === 'Sets' ? 2 : (c === 'Tops' || c === 'Pants' || c === 'Medical Devices') ? 1 : 0) : 0) * (+r.qty.value || 0); }, 0);
   const upd = (fromItems) => {
     if (fromItems) amount.value = (Math.min(rows.reduce((a, r) => a + r.l.paid_each * (+r.qty.value || 0), 0), left) / 100).toFixed(2);
     const h = halves();

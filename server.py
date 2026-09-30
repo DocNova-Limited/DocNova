@@ -33,7 +33,7 @@ def deliver(email, token):
                    'Thank you for joining DocNova.\n\nAs a welcome gift, enjoy 10% off your first order with code FIRSTSHIFT10 at checkout '
                    '(products only, delivery excluded; one discount code per order).\n\n'
                    'You are also now a DocNova Rounds member, and your first round is already on your card: ' + r['balance'] + ' of 10 rounds. '
-                   'Every scrub set earns 1 round, every top or pair of trousers ½ round. Complete 10 rounds and your next scrub set is on us.\n'
+                   'Every scrub set earns 1 round; every top, pair of trousers or medical device ½ round. Complete 10 rounds and your next scrub set is on us.\n'
                    'View your Rounds card: ' + r['card'] + '\n(This private link works for 7 days; you can request a new one any time at ' + base + '/#/rounds)\n\n'
                    'Refer a colleague: share ' + r['share'] + ' and earn a bonus round when they place their first order.\n\n'
                    'Shop the collection: ' + base + '\n\n'

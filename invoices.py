@@ -425,11 +425,11 @@ def send_rounds_welcome(number):
     ref = 'invoice ' + inv['number']
     lead = ('Dear %s, thank you for choosing DocNova. As one of our first customers, you are now a member of '
             '<strong>DocNova Rounds</strong>, our rewards programme. We have added your earlier purchase (%s) to your card, '
-            'plus your 1-round joining bonus: you have <strong>%s of 10 rounds</strong>. Every scrub set earns 1 round, every top or pair of '
-            'trousers ½ round, and when you complete 10 rounds your next scrub set is on us.' % (html.escape(greet), html.escape(ref), loyalty.fmt(bal)))
+            'plus your 1-round joining bonus: you have <strong>%s of 10 rounds</strong>. Every scrub set earns 1 round, every top, pair of '
+            'trousers or medical device ½ round, and when you complete 10 rounds your next scrub set is on us.' % (html.escape(greet), html.escape(ref), loyalty.fmt(bal)))
     text = ('Dear %s,\n\nThank you for choosing DocNova. As one of our first customers, you are now a member of DocNova Rounds, our rewards programme. '
             'We have added your earlier purchase (%s) to your card, plus your 1-round joining bonus: you have %s of 10 rounds.\n\n'
-            'Every scrub set earns 1 round, every top or pair of trousers half a round. Complete 10 rounds and your next scrub set is free.\n\n'
+            'Every scrub set earns 1 round; every top, pair of trousers or medical device half a round. Complete 10 rounds and your next scrub set is free.\n\n'
             'View your card: %s (private link, works for %d days)\nRefer a colleague: %s (you earn a bonus round on their first order)\n\n'
             'Shop online: %s\n\nDocNova Ltd · Cambridge, UK' % (greet, ref, loyalty.fmt(bal), link, loyalty.LINK_DAYS, share, base))
     try:

@@ -2,7 +2,7 @@
 
 Rules (kept in one place so the website, emails and admin tool always agree):
   * Joining bonus: 1 round, once per email address.
-  * Every scrub set = 1 round; every top or pair of trousers = ½ round. Medical devices don't earn.
+  * Every scrub set = 1 round; every other item (a top, a pair of trousers or a medical device) = ½ round.
   * Referral: when someone who named you as their referrer places their first paid order, you get 1 round.
   * complete 10 rounds = the customer's next scrub set free, their choice, sent as a one-time ROUNDS-XXXXXX code (valid 12 months).
   * The free set in a reward order, and any item given free (£0.00), doesn't earn a round; a fully refunded order has its rounds removed.
@@ -14,7 +14,7 @@ import shop
 
 JOIN_BONUS, REFERRAL_BONUS, REWARD_AT = 2, 2, 20          # in half-rounds: 1, 1 and 10 rounds
 REWARD_DAYS, LINK_DAYS = 365, 7
-EARN = {'Sets': 2, 'Tops': 1, 'Pants': 1}                 # half-rounds per item
+EARN = {'Sets': 2, 'Tops': 1, 'Pants': 1, 'Medical Devices': 1}   # half-rounds per item
 CODE_RE = re.compile(r'ROUNDS-[A-Z2-9]{6}')
 EMAIL_RE = re.compile(r'[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+')
 
@@ -145,7 +145,7 @@ def send_link(email, welcome=False):
     m = member(email)
     share = base + '/#/rounds?ref=' + m['ref_code']
     text = ('%s\n\nView your card: %s\n(This private link works for %d days.)\n\nHow it works: every scrub set earns 1 round, '
-            'every top or pair of trousers ½ round. Collect 10 rounds and we send you a code for your next scrub set free.\n\n'
+            'every other item — a top, trousers or a medical device — ½ round. Collect 10 rounds and we send you a code for your next scrub set free.\n\n'
             'Refer a colleague: share %s — when they place their first order, you earn a bonus round.\n\nDocNova'
             % (lead, link, LINK_DAYS, share))
     try:
@@ -190,7 +190,7 @@ def card_html(lead, bal, link, button, share='', code=''):
             '<tr><td align="center" style="padding:24px 32px 28px"><a href="%s" style="display:inline-block;background:#182130;color:#ffffff;'
             'text-decoration:none;font:600 15px Arial;padding:16px 30px">%s</a></td></tr>%s'
             '<tr><td style="border-top:1px solid #ece9e3;padding:18px 32px;font:12px/1.6 Arial;color:#8a909a;text-align:center">'
-            '1 round when you join · 1 per scrub set · ½ per top or trousers · 1 per colleague referred · complete 10 rounds for a free set<br>'
+            '1 round when you join · 1 per scrub set · ½ per top, trousers or medical device · 1 per new colleague referred · complete 10 rounds for a free set<br>'
             'DocNova Ltd · Registered in England &amp; Wales No. 16502835 · Cambridge, UK</td></tr>'
             '</table></td></tr></table></body></html>' % (base, base, lead, code_box, card_img(done, link), link, button, ref))
 
