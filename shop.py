@@ -609,12 +609,15 @@ def send_order_email(order, kind):
                     'Click &amp; Collect: the DocNova team will contact you today to arrange a collection time and place in the Cambridge area.'
                     if collect else 'We will email you again with a tracking number as soon as it is dispatched.',
                     ('<p style="margin:18px 0 12px;color:#182130;font-weight:600">%s</p>%s' % (escape(line), loyalty.card_img(loyalty.balance(loyalty.norm(order['email'])), card))) if line else ''))
+        lead += review_block_html(arrived=collect)
+        text += review_text(arrived=collect)
         html_body = invoices._email_html(None, base, 'Your order is confirmed', lead, 'Track your order', track)
     else:
         subject = 'Your DocNova order ' + order['order_number'] + ' is on its way'
         text = ('Good news: your order has been dispatched.\n\nOrder number: %s\nCarrier: %s\nTracking number: %s\n%s\n'
                 'Track your order: %s\n' % (order['order_number'], order['carrier'] or '-', order['tracking_number'] or '-',
                                             ('Carrier tracking: ' + order['tracking_url'] + '\n') if order['tracking_url'] else '', track))
+        text += review_text(arrived=False)
     try:
         send_mail(order['email'], subject, text, html_body if kind == 'confirmation' else None)
     except Exception as e:
@@ -683,3 +686,25 @@ def google_reviews():
             'maps_url': raw.get('googleMapsUri') or base['links']['maps'], 'reviews': reviews}
     _reviews_cache.update(at=now, data=data)
     return data
+
+# ---------------------------------------------------------------- review request (Google reviews)
+def review_link():
+    return google_links(os.getenv('GOOGLE_PLACE_ID', DEFAULT_PLACE_ID).strip())['write']
+
+def review_block_html(arrived=True):
+    """A gentle request for an honest Google review, shown in order and receipt emails."""
+    from html import escape
+    intro = ('How are you finding your DocNova order?' if arrived else 'Once your order has arrived and you’ve worn it on shift,')
+    ask = ('We would really value your honest review. It helps us improve, and helps fellow healthcare professionals choose with confidence. '
+           'Thank you — we truly appreciate your remarks.' if arrived else
+           'we would really value your honest review. It helps us improve, and helps fellow healthcare professionals choose with confidence.')
+    return ('<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="margin:22px 0 4px;background:#f7f5f1;border:1px solid #eee9e0;border-radius:12px">'
+            '<tr><td style="padding:18px 20px;font:14px/1.6 Arial;color:#4a5260">'
+            '<p style="margin:0 0 6px;font:600 15px Arial;color:#182130">%s</p><p style="margin:0 0 14px">%s</p>'
+            '<a href="%s" style="display:inline-block;background:#c9a96e;color:#182130;text-decoration:none;font:700 14px Arial;padding:11px 20px;border-radius:24px">Leave a Google review</a>'
+            '</td></tr></table>' % (escape(intro), escape(ask), escape(review_link())))
+
+def review_text(arrived=True):
+    lead = ('How are you finding your DocNova order? We would really value your honest Google review'
+            if arrived else 'Once your order has arrived, we would really value your honest Google review')
+    return '\n' + lead + ' — it helps us improve and helps fellow healthcare professionals choose with confidence:\n' + review_link() + '\n'
