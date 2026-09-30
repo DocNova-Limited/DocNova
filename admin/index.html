@@ -69,7 +69,20 @@ tbody tr:hover{background:#f7f5f0}
 .line button{padding:10px;background:#eee;color:#333}
 .tot{display:flex;justify-content:space-between;padding:6px 0}.tot.big{font-weight:700;font-size:18px;border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
 .acts{display:flex;gap:6px;flex-wrap:wrap}.acts button,.acts a{padding:7px 10px;font-size:13px}
-@media(max-width:600px){.line{grid-template-columns:1fr 70px 56px;}.line .pr,.line .rm{grid-column:span 1}}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:#fff;color:var(--navy);border:1px solid #cfd5de;border-radius:22px;padding:9px 14px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
+.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.chip .sw{width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid #0002}
+.qty{min-width:34px;text-align:center;font-weight:700;align-self:center}
+.addrow{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid #eee9e0;flex-wrap:wrap}
+.bline{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee9e0;flex-wrap:wrap}
+.rm{padding:8px 11px;background:#eee;color:#333}
+.paycards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+.paycard{background:#fff;color:var(--navy);border:2px solid #d8dde5;border-radius:12px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;font-weight:400}
+.paycard strong{font-size:15px}.paycard span{font-size:13px;color:var(--muted)}
+.paycard.on{border-color:var(--gold);background:#fffaf0}
+button.big{padding:15px 22px;font-size:15px}
+@media(max-width:600px){.paycards{grid-template-columns:1fr}.line{grid-template-columns:1fr 70px 56px;}.line .pr,.line .rm{grid-column:span 1}}
 @media(max-width:600px){.grid3{grid-template-columns:1fr 1fr}.stat strong{font-size:22px}}
 </style>
 </head>
@@ -98,7 +111,7 @@ tbody tr:hover{background:#f7f5f0}
   </div>
   <div id="tab-invoices" hidden>
     <div class="help" id="invHelp"></div>
-    <div class="tools"><button class="gold" id="newInv" type="button">+ New invoice</button>
+    <div class="tools"><button class="gold" id="newInv" type="button">+ Record a sale / invoice</button>
       <select id="invFilter"><option value="all">All invoices</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></div>
     <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invRows"></tbody></table></div>
   </div>
@@ -160,7 +173,7 @@ async function load() {
   try { const d = await api('people'); PEOPLE = d.people; } catch (e) { return; }
   loadApprovals();
   $('#login').hidden = true; $('#app').hidden = false;
-  $('#who').replaceChildren(el('button', {class: 'ghost', type: 'button', onclick: async () => { await fetch('/admin/logout', {method: 'POST', headers: {'X-DocNova-Admin': '1'}}); showLogin(); }}, 'Sign out'));
+  $('#who').replaceChildren(el('button', {class: 'gold', type: 'button', style: 'margin-right:10px', onclick: startSale}, '+ Record a sale'), el('button', {class: 'ghost', type: 'button', onclick: async () => { await fetch('/admin/logout', {method: 'POST', headers: {'X-DocNova-Admin': '1'}}); showLogin(); }}, 'Sign out'));
   const cust = PEOPLE.filter(p => p.orders), subs = PEOPLE.filter(p => p.subscriber && p.subscriber !== 'unsubscribed');
   $('#stats').replaceChildren(
     stat('People', PEOPLE.length), stat('Customers', cust.length), stat('Subscribers', subs.length),
@@ -309,70 +322,118 @@ function renderInvoices() {
           i.refunded ? '' : act('Undo paid', {action: 'undo'})] : '')));
   }) : [el('tr', {}, el('td', {colspan: 6, class: 'muted'}, 'No invoices yet.'))]));
 }
-$('#newInv').addEventListener('click', () => newInvoice());
+$('#newInv').addEventListener('click', startSale);
+async function startSale() { if (!INV.catalogue.length) { try { INV = await api('invoices'); } catch (e) { return; } } newInvoice(); }
 function newInvoice() {
   const inp = (attrs) => el('input', attrs);
-  const name = inp({type: 'text', maxlength: 100, placeholder: 'e.g. Dr Sarah Khan'}), email = inp({type: 'email', placeholder: 'sarah@nhs.net'});
-  const phone = inp({type: 'tel', placeholder: 'optional'}), addr = el('textarea', {rows: 2, placeholder: 'optional, e.g. Ward 5, Addenbrooke’s'});
-  const discount = inp({type: 'number', min: 0, step: '0.01', value: 0}), delivery = inp({type: 'number', min: 0, step: '0.01', value: 0});
-  const due = inp({type: 'number', min: 0, max: 90, value: 7}), note = inp({type: 'text', maxlength: 500, placeholder: 'optional note on the invoice'});
-  const past = el('input', {type: 'checkbox'}), pdate = inp({type: 'date', value: new Date().toISOString().slice(0, 10)});
-  const pmethod = el('select', {}, el('option', {value: 'bank'}, 'Bank transfer'), el('option', {value: 'cash'}, 'Cash'), el('option', {value: 'card'}, 'Card'));
-  const welcome = el('input', {type: 'checkbox', checked: true});
-  const orig = inp({type: 'text', maxlength: 20, placeholder: 'e.g. INV-000786 (optional)'});
-  const pastBox = el('div', {hidden: true}, el('div', {class: 'grid3'}, el('div', {}, el('label', {}, 'Date paid'), pdate), el('div', {}, el('label', {}, 'Paid by'), pmethod), el('div', {}, el('label', {}, 'Original invoice no.'), orig)),
-    el('label', {class: 'check'}, welcome, el('span', {}, 'Email them a welcome to DocNova Rounds (shows their rounds and card)')));
-  past.addEventListener('change', () => { pastBox.hidden = !past.checked; go.textContent = past.checked ? 'Save past sale' : 'Create & email invoice'; });
-  const lines = el('div', {}), totals = el('div', {}), msg = el('p', {class: 'msg'});
-  const groups = {}; INV.catalogue.forEach(p => (groups[p.device ? 'Medical devices' : ({Sets: 'Scrub sets', Tops: 'Tops', Pants: 'Trousers'}[p.category] || p.category)] ||= []).push(p));
-  const byId = Object.fromEntries(INV.catalogue.map(p => [p.id, p]));
-  function addLine() {
-    const prod = el('select', {}, el('option', {value: ''}, 'Choose a product…'), Object.entries(groups).map(([g, ps]) => el('optgroup', {label: g}, ps.map(p => el('option', {value: p.id}, p.name + ' — ' + gbp(p.pence))))));
-    const size = el('select', {}, INV.sizes.map(z => el('option', {value: z}, z))); size.value = 'M';
-    const qty = inp({type: 'number', min: 1, max: 50, value: 1}), price = inp({type: 'number', min: 0, step: '0.01', placeholder: '£'});
-    const row = el('div', {class: 'line'}, el('div', {}, el('label', {}, 'Product'), prod), el('div', {}, el('label', {}, 'Size'), size),
-      el('div', {}, el('label', {}, 'Qty'), qty), el('div', {class: 'pr'}, el('label', {}, 'Price each £'), price),
-      el('button', {type: 'button', class: 'rm', title: 'Remove', onclick: () => { row.remove(); calc(); }}, '×'));
-    prod.addEventListener('change', () => { const p = byId[prod.value]; if (p) { price.value = (p.pence / 100).toFixed(2); size.disabled = p.device; } calc(); });
-    [qty, price, size].forEach(x => x.addEventListener('input', calc));
-    row._get = () => ({id: prod.value, size: byId[prod.value]?.device ? 'Standard' : size.value, qty: +qty.value, price: price.value});
-    lines.append(row);
+  const today = new Date().toISOString().slice(0, 10);
+  // ---- customer (known customers pop up as you type their email)
+  const known = el('datalist', {id: 'knownPeople'}, PEOPLE.map(p => el('option', {value: p.email}, p.name || '')));
+  const name = inp({type: 'text', maxlength: 100, placeholder: 'e.g. Dr Sarah Khan'});
+  const email = inp({type: 'email', placeholder: 'sarah@nhs.net', list: 'knownPeople', autocomplete: 'off'});
+  const phone = inp({type: 'tel', placeholder: 'optional'}), addr = inp({type: 'text', placeholder: 'optional, e.g. Ward 5, Addenbrooke’s'});
+  email.addEventListener('change', () => { const p = PEOPLE.find(x => x.email === email.value.trim().toLowerCase()); if (p && p.name && !name.value) name.value = p.name; calc(); });
+  // ---- item picker: tap type → fit → colour → size → Add
+  const CAT = INV.catalogue, byId = Object.fromEntries(CAT.map(p => [p.id, p]));
+  const SW = {'Navy Blue': '#1f2a44', 'Royal Blue': '#2456a6', 'Black': '#15171b', 'Burgundy': '#6d1f33', 'Green': '#2f5d50', 'Pewter Grey': '#7b8088', 'Pink': '#e7a6b8'};
+  const TYPES = [['Sets', 'Scrub set'], ['Tops', 'Top'], ['Pants', 'Trousers'], ['device', 'Medical device']];
+  const pick = {type: 'Sets', fit: 'Women', color: '', size: 'M', device: '', qty: 1};
+  const picker = el('div', {});
+  const chip = (label, on, click, extra = {}) => el('button', {type: 'button', class: on ? 'chip on' : 'chip', onclick: click, ...extra}, label);
+  function drawPicker() {
+    const isDev = pick.type === 'device';
+    const pool = CAT.filter(p => isDev ? p.device : !p.device && p.category === pick.type && p.fit === pick.fit);
+    const colours = [...new Set(pool.map(p => p.color))];
+    if (!isDev && !colours.includes(pick.color)) pick.color = colours[0] || '';
+    if (isDev && !pool.some(p => p.id === pick.device)) pick.device = pool[0]?.id || '';
+    const chosen = isDev ? byId[pick.device] : pool.find(p => p.color === pick.color);
+    picker.replaceChildren(...[
+      el('label', {}, '1. What is it?'), el('div', {class: 'chips'}, TYPES.map(([v, l]) => chip(l, pick.type === v, () => { pick.type = v; drawPicker(); }))),
+      isDev ? [el('label', {}, '2. Which device?'), el('div', {class: 'chips'}, pool.map(p => chip(p.name.replace(/^DocNova\s*/, '') + ' — ' + gbp(p.pence), pick.device === p.id, () => { pick.device = p.id; drawPicker(); })))] : [
+        el('label', {}, '2. Fit'), el('div', {class: 'chips'}, ['Women', 'Men'].map(f => chip(f, pick.fit === f, () => { pick.fit = f; drawPicker(); }))),
+        el('label', {}, '3. Colour'), el('div', {class: 'chips'}, colours.map(c => chip([el('i', {class: 'sw', style: 'background:' + (SW[c] || '#ccc')}), c], pick.color === c, () => { pick.color = c; drawPicker(); }))),
+        el('label', {}, '4. Size'), el('div', {class: 'chips'}, INV.sizes.map(z => chip(z, pick.size === z, () => { pick.size = z; drawPicker(); })))],
+      el('label', {}, (isDev ? '3' : '5') + '. How many?'),
+      el('div', {class: 'chips'}, el('button', {type: 'button', class: 'chip', onclick: () => { pick.qty = Math.max(1, pick.qty - 1); drawPicker(); }}, '−'),
+        el('span', {class: 'qty'}, pick.qty), el('button', {type: 'button', class: 'chip', onclick: () => { pick.qty = Math.min(50, pick.qty + 1); drawPicker(); }}, '+')),
+      el('div', {class: 'addrow'}, chosen ? el('div', {}, el('strong', {}, pick.qty + ' × ' + chosen.name + (isDev ? '' : ' · ' + pick.size)), el('div', {class: 'muted'}, gbp(chosen.pence) + ' each')) : el('span', {class: 'muted'}, 'Not available'),
+        el('button', {type: 'button', class: 'gold', disabled: !chosen, onclick: () => { addItem(chosen, isDev ? 'Standard' : pick.size, pick.qty); pick.qty = 1; drawPicker(); }}, '+ Add to sale'))].flat());
   }
+  // ---- basket
+  const basket = el('div', {}), totals = el('div', {}), msg = el('p', {class: 'msg'});
+  const items = [];
+  function addItem(p, size, qty) {
+    const same = items.find(i => i.id === p.id && i.size === size && +i.price === p.pence / 100);
+    if (same) same.qty = Math.min(50, same.qty + qty); else items.push({id: p.id, name: p.name, size, qty, price: (p.pence / 100).toFixed(2)});
+    drawBasket();
+  }
+  function drawBasket() {
+    basket.replaceChildren(...(items.length ? items.map((it, n) => {
+      const price = inp({type: 'number', min: 0, step: '0.01', value: it.price, style: 'width:100px'}); price.addEventListener('input', () => { it.price = price.value; calc(); });
+      return el('div', {class: 'bline'}, el('div', {}, el('strong', {}, it.qty + ' × ' + it.name), it.size === 'Standard' ? '' : el('span', {class: 'muted'}, ' · ' + it.size)),
+        el('div', {style: 'display:flex;gap:8px;align-items:center'}, el('span', {class: 'muted'}, '£ each'), price,
+          el('button', {type: 'button', class: 'rm', title: 'Remove', onclick: () => { items.splice(n, 1); drawBasket(); }}, '×')));
+    }) : [el('p', {class: 'muted', style: 'margin:0'}, 'Nothing added yet — pick an item above and press “+ Add to sale”.')]));
+    calc();
+  }
+  // ---- payment
+  let mode = 'paid', method = 'bank';
+  const pdate = inp({type: 'date', value: today, max: today}), receipt = el('input', {type: 'checkbox', checked: true});
+  const due = inp({type: 'number', min: 0, max: 90, value: 7});
+  const discount = inp({type: 'number', min: 0, step: '0.01', value: 0}), delivery = inp({type: 'number', min: 0, step: '0.01', value: 0});
+  const note = inp({type: 'text', maxlength: 500, placeholder: 'optional note printed on the invoice'});
+  const orig = inp({type: 'text', maxlength: 20, placeholder: 'only for old invoices, e.g. INV-000786'});
+  const payBox = el('div', {});
+  function drawPay() {
+    payBox.replaceChildren(
+      el('div', {class: 'paycards'},
+        el('button', {type: 'button', class: 'paycard' + (mode === 'paid' ? ' on' : ''), onclick: () => { mode = 'paid'; drawPay(); }}, el('strong', {}, '✓ Paid — money received'), el('span', {}, 'e.g. they paid you by bank transfer or cash')),
+        el('button', {type: 'button', class: 'paycard' + (mode === 'unpaid' ? ' on' : ''), onclick: () => { mode = 'unpaid'; drawPay(); }}, el('strong', {}, '✉ Not paid yet'), el('span', {}, 'email them an invoice to pay (card link included)'))),
+      mode === 'paid' ? el('div', {}, el('label', {}, 'Paid by'), el('div', {class: 'chips'}, [['bank', 'Bank transfer'], ['cash', 'Cash'], ['card', 'Card']].map(([v, l]) => chip(l, method === v, () => { method = v; drawPay(); }))),
+          el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Date paid'), pdate), el('div', {})),
+          el('label', {class: 'check'}, receipt, el('span', {}, 'Email the customer their paid receipt (with their DocNova Rounds card)')))
+        : el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Days to pay'), due), el('div', {})),
+      el('details', {style: 'margin-top:12px'}, el('summary', {class: 'muted', style: 'cursor:pointer'}, 'More options (discount, delivery, note)'),
+        el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Discount £ (whole sale)'), discount), el('div', {}, el('label', {}, 'Delivery £'), delivery)),
+        el('label', {}, 'Note'), note, el('label', {}, 'Original invoice number'), orig));
+    go.textContent = mode === 'unpaid' ? 'Create & email invoice' : (receipt.checked && email.value ? 'Save sale & email receipt' : 'Save sale');
+    calc();
+  }
+  receipt.addEventListener('change', drawPay); email.addEventListener('input', () => { if (mode === 'paid') go.textContent = receipt.checked && email.value ? 'Save sale & email receipt' : 'Save sale'; calc(); });
   function calc() {
-    const ls = [...lines.children].map(r => r._get()).filter(l => l.id);
-    const sub = ls.reduce((a, l) => a + Math.round((+l.price || 0) * 100) * (l.qty || 0), 0);
+    const sub = items.reduce((a, l) => a + Math.round((+l.price || 0) * 100) * l.qty, 0);
     const d = Math.min(Math.round((+discount.value || 0) * 100), sub), dl = Math.round((+delivery.value || 0) * 100);
-    const rounds = ls.reduce((a, l) => { const c = byId[l.id]?.category; return a + (c === 'Sets' ? 1 : (c === 'Tops' || c === 'Pants') ? .5 : 0) * (l.qty || 0); }, 0);
-    totals.replaceChildren(el('div', {class: 'tot'}, el('span', {}, 'Subtotal'), el('span', {}, gbp(sub))),
-      d ? el('div', {class: 'tot'}, el('span', {}, 'Discount'), el('span', {}, '−' + gbp(d))) : '',
+    const rounds = items.reduce((a, l) => { const c = byId[l.id]?.category; return a + ((+l.price || 0) > 0 ? (c === 'Sets' ? 1 : (c === 'Tops' || c === 'Pants') ? .5 : 0) : 0) * l.qty; }, 0);
+    totals.replaceChildren(d ? el('div', {class: 'tot'}, el('span', {}, 'Discount'), el('span', {}, '−' + gbp(d))) : '',
       dl ? el('div', {class: 'tot'}, el('span', {}, 'Delivery'), el('span', {}, gbp(dl))) : '',
       el('div', {class: 'tot big'}, el('span', {}, 'Total'), el('span', {}, gbp(sub - d + dl))),
-      el('p', {class: 'muted', style: 'margin:6px 0 0'}, 'Earns ' + rounds + ' DocNova round' + (rounds === 1 ? '' : 's') + ' when paid' + (email.value ? '' : ' (needs an email address)') + '.'));
+      el('p', {class: 'muted', style: 'margin:6px 0 0'}, email.value ? 'Adds ' + rounds + ' DocNova round' + (rounds === 1 ? '' : 's') + ' to their card' + (mode === 'unpaid' ? ' once paid.' : '.') : 'Add their email so the sale counts towards DocNova Rounds.'));
   }
-  [discount, delivery, email].forEach(x => x.addEventListener('input', calc));
-  const go = el('button', {class: 'gold', type: 'button', onclick: async () => {
-    const ls = [...lines.children].map(r => r._get()).filter(l => l.id);
-    if (!ls.length) { msg.className = 'msg bad'; msg.textContent = 'Please add at least one product.'; return; }
+  [discount, delivery].forEach(x => x.addEventListener('input', calc));
+  const go = el('button', {class: 'gold big', type: 'button', onclick: async () => {
+    if (!name.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please enter the customer’s name.'; return; }
+    if (!items.length) { msg.className = 'msg bad'; msg.textContent = 'Please add at least one item.'; return; }
+    if (mode === 'unpaid' && !email.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'An email address is needed to send the invoice.'; return; }
     go.disabled = true; msg.textContent = '';
     try {
-      const r = await api('invoice/create', {name: name.value, email: email.value, phone: phone.value, address: addr.value, lines: ls,
-        discount: discount.value, delivery: delivery.value, due_days: due.value, note: note.value,
-        already_paid: past.checked, paid_method: pmethod.value, paid_date: pdate.value, welcome: past.checked && welcome.checked, number: past.checked ? orig.value : '', source: past.checked ? 'import' : 'admin'});
+      const paid = mode === 'paid';
+      const r = await api('invoice/create', {name: name.value, email: email.value, phone: phone.value, address: addr.value,
+        lines: items.map(i => ({id: i.id, size: i.size, qty: i.qty, price: i.price})), discount: discount.value, delivery: delivery.value,
+        due_days: due.value, note: note.value, already_paid: paid, paid_method: method, paid_date: pdate.value, receipt: paid && receipt.checked,
+        number: orig.value.trim(), source: orig.value.trim() ? 'import' : 'admin'});
       close(); await loadInvoices(); load();
-      alert(r.email_error ? r.number + ' created. ' + r.email_error : r.number + (r.status === 'paid' ? ' saved as paid. Rounds added.' : ' created and emailed to the customer.'));
+      alert(r.email_error ? r.number + ' saved. ' + r.email_error : r.number + (r.status === 'paid' ? ' saved as paid' + (paid && receipt.checked && email.value ? ' and the receipt was emailed to the customer.' : '.') + ' DocNova Rounds added.' : ' created and emailed to the customer.'));
     } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; go.disabled = false; }
-  }}, 'Create & email invoice');
-  addLine(); calc();
-  $('#panel').replaceChildren(
-    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('h2', {}, 'New invoice')), el('button', {class: 'ghost', type: 'button', onclick: close}, 'Close')),
-    el('section', {class: 'card'}, el('h3', {}, 'Customer'),
-      el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Name'), name), el('div', {}, el('label', {}, 'Email (to send the invoice)'), email)),
+  }}, 'Save sale & email receipt');
+  drawPicker(); drawBasket(); drawPay();
+  $('#panel').replaceChildren(known,
+    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, 'New sale / invoice'), el('h2', {}, 'Record a sale')), el('button', {class: 'ghost', type: 'button', onclick: close}, 'Close')),
+    el('section', {class: 'card'}, el('h3', {}, 'Step 1 · Customer'),
+      el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Name'), name), el('div', {}, el('label', {}, 'Email'), email)),
       el('div', {class: 'grid2'}, el('div', {}, el('label', {}, 'Phone'), phone), el('div', {}, el('label', {}, 'Address / ward'), addr))),
-    el('section', {class: 'card'}, el('h3', {}, 'Items'), lines, el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: addLine}, '+ Add another item'),
-      el('div', {class: 'grid3', style: 'margin-top:8px'}, el('div', {}, el('label', {}, 'Discount £'), discount), el('div', {}, el('label', {}, 'Delivery £'), delivery), el('div', {}, el('label', {}, 'Days to pay'), due)),
-      el('label', {}, 'Note'), note, el('div', {style: 'margin-top:12px'}, totals)),
-    el('section', {class: 'card'}, el('label', {class: 'check'}, past, el('span', {}, 'This is a past sale that is already paid (e.g. from Zoho) — save it and add the rounds, but don’t email an invoice')), pastBox,
-      el('p', {style: 'margin:14px 0 0'}, go), msg));
+    el('section', {class: 'card'}, el('h3', {}, 'Step 2 · Items'), picker),
+    el('section', {class: 'card'}, el('h3', {}, 'In this sale'), basket, el('div', {style: 'margin-top:10px'}, totals)),
+    el('section', {class: 'card'}, el('h3', {}, 'Step 3 · Payment'), payBox, el('p', {style: 'margin:16px 0 0'}, go), msg));
   $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }
 // ---------------------------------------------------------------- all sales + returns

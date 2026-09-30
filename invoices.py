@@ -42,7 +42,8 @@ def listing():
     return rows
 
 def catalogue_for_admin():
-    return sorted(({'id': p['id'], 'name': p['name'], 'category': p['category'], 'pence': p['pence'], 'device': p['device']}
+    return sorted(({'id': p['id'], 'name': p['name'], 'category': p['category'], 'pence': p['pence'], 'device': p['device'],
+                    'fit': p.get('fit') or '', 'color': p.get('color') or ''}
                    for p in shop.catalogue().values()), key=lambda p: (p['device'], p['category'], p['name']))
 
 def _pence(value, label):
@@ -129,7 +130,8 @@ def create(data):
     if name and email:
         _remember_name(email, name)
     if paid:
-        mark_paid(number, method, when=issue, notify=False)
+        # receipt=True: a sale paid today (e.g. in person) -> the customer gets a paid receipt with their Rounds card
+        mark_paid(number, method, when=issue, notify=data.get('receipt') is True and bool(email))
     inv = get(number)
     if paid and email and data.get('welcome') is True:
         inv['welcome_sent'] = send_rounds_welcome(number)
@@ -388,15 +390,21 @@ def send_receipt(number):
         card = base + '/#/rounds?t=' + loyalty.new_token(inv['email'])
     except Exception:
         pass
-    lead = ('<p style="margin:0 0 14px">Thank you — we’ve received your payment of <strong style="color:#182130">%s</strong> for invoice '
-            '<strong style="color:#182130">%s</strong>.</p>%s' % (shop.money(inv['total']), _esc(inv['number']),
+    rows = ''.join('<tr><td style="padding:7px 0;border-bottom:1px solid #eee9e0">%d × %s%s</td><td align="right" style="padding:7px 0;border-bottom:1px solid #eee9e0">%s</td></tr>'
+                   % (l['qty'], _esc(l['name']), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % _esc(l['size']),
+                      shop.money(l['unit_pence'] * l['qty'])) for l in json.loads(inv['lines_json']))
+    items = ('<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130;margin:0 0 18px">%s'
+             '<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td align="right" style="padding:8px 0;font-weight:700">%s</td></tr></table>'
+             % (rows, shop.money(inv['total'])))
+    lead = ('<p style="margin:0 0 14px">Dear %s, thank you for choosing DocNova — we’ve received your payment of <strong style="color:#182130">%s</strong> for invoice '
+            '<strong style="color:#182130">%s</strong>.</p>%s%s' % (_esc(_greet(inv['customer_name'])), shop.money(inv['total']), _esc(inv['number']), items,
             ('<p style="margin:0 0 14px;color:#182130;font-weight:600">%s</p>%s' % (_esc(progress), loyalty.card_img(loyalty.balance(inv['email']), card))) if progress else ''))
     extra = ('<tr><td align="center" style="padding:0 30px 26px"><a href="%s" style="color:#004c9b;font:600 14px Arial">View my DocNova Rounds card</a></td></tr>' % _esc(card)) if card else ''
     text = 'Thank you, we have received your payment of %s for invoice %s.\n\n%s\n\nYour paid invoice: %s\n%s\nDocNova Ltd · Cambridge, UK\n' % (
         shop.money(inv['total']), inv['number'], progress, url, ('Your Rounds card: ' + card + '\n') if card else '')
     try:
-        shop.send_mail(inv['email'], 'Payment received — DocNova invoice ' + inv['number'], text,
-                       _email_html(inv, base, 'Payment received', lead, 'View paid invoice', url, extra))
+        shop.send_mail(inv['email'], 'Thank you for your DocNova order — receipt ' + inv['number'], text,
+                       _email_html(inv, base, 'Thank you for your order', lead, 'View / print your receipt', url, extra))
     except Exception as e:
         shop.log_email_error('receipt for ' + number, e)
         return False
