@@ -5,7 +5,7 @@ Sign-in makes a random session cookie (HttpOnly, Secure, SameSite=Strict, 12 hou
 server signs everyone out. Ten wrong passwords in 15 minutes pauses all sign-ins for 15 minutes (the host's proxy hides real
 visitor addresses, so the limit is site-wide).
 """
-import hmac, json, os, secrets, time
+import hmac, html, json, os, secrets, time
 import shop, loyalty
 
 SESSION_SECONDS = 12 * 3600
@@ -180,3 +180,48 @@ def csv_export():
         w.writerow([p['email'], name, p['subscriber'], 'yes' if p['member'] else 'no', p['orders'], '%.2f' % (p['spent_pence'] / 100),
                     p['sets'], p['tops'], p['trousers'], p['devices'], p['rounds'], p['to_go'], p['rewards'], p['rewards_unused'], p['referrals']])
     return buf.getvalue()
+
+def subscribe_customer(email, notify=True):
+    """Put an existing customer on the newsletter list (they bought from DocNova, so they can be told about
+    similar products; every email has an unsubscribe link) and send them a confirmation with their Rounds card."""
+    import invoices
+    email = loyalty.norm(email)
+    if not email:
+        raise ValueError('Invalid email.')
+    now = int(time.time())
+    with shop._lock, shop.db() as conn:
+        row = conn.execute('SELECT token, status FROM subscribers WHERE email=?', (email,)).fetchone()
+        if row and row['status'] == 'unsubscribed':
+            raise ValueError('This customer unsubscribed earlier, so they can’t be added back.')
+        token = row['token'] if row else secrets.token_urlsafe(24)
+        if not row:
+            conn.execute("INSERT INTO subscribers (email, token, consent_at, status, attempted_at, source) VALUES (?,?,?,?,?,?)",
+                         (email, token, now, 'sent', now, 'customer'))
+    m = loyalty.ensure_member(email, joined=True)
+    sent = False
+    if notify and shop.smtp_configured():
+        base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
+        bal = loyalty.balance(email)
+        left = max(loyalty.REWARD_AT - bal, 0)
+        link = base + '/#/rounds?t=' + loyalty.new_token(email)
+        share = base + '/#/rounds?ref=' + m['ref_code']
+        unsub = base + '/unsubscribe?token=' + token
+        with shop.db() as conn:
+            n = conn.execute('SELECT name FROM customer_notes WHERE email=?', (email,)).fetchone()
+            o = conn.execute('SELECT customer_name FROM orders WHERE lower(email)=? AND customer_name IS NOT NULL ORDER BY paid_at DESC', (email,)).fetchone()
+        greet = invoices._greet((n and n['name']) or (o and o['customer_name']) or '')
+        lead = ('Dear %s, thank you again for choosing DocNova. You’re now on the DocNova members’ list, so you’ll be first to hear about '
+                'new colours, restocks and members-only offers.<br><br>Your <strong>DocNova Rounds</strong> card has '
+                '<strong>%s of 10 rounds</strong> — %s. Every scrub set earns 1 round and every other item ½ round.'
+                '<br><br><span style="font-size:12px;color:#8a909a">Prefer not to hear from us? <a href="%s" style="color:#8a909a">Unsubscribe</a> at any time.</span>'
+                % (html.escape(greet), loyalty.fmt(bal), ('only %s to go until your next scrub set is free' % loyalty.fmt(left)) if left else 'your free set is being prepared', unsub))
+        text = ('Dear %s,\n\nThank you again for choosing DocNova. You are now on the DocNova members\' list, so you will be first to hear about new colours, '
+                'restocks and members-only offers.\n\nYour DocNova Rounds card has %s of 10 rounds%s.\nView your card: %s\nRefer a colleague: %s\n\n'
+                'Unsubscribe: %s\n\nDocNova Ltd · Cambridge, UK' % (greet, loyalty.fmt(bal), (' — %s to go until your next scrub set is free' % loyalty.fmt(left)) if left else '', link, share, unsub))
+        try:
+            shop.send_mail(email, 'You’re on the DocNova members’ list — %s of 10 rounds on your card' % loyalty.fmt(bal), text,
+                           loyalty.card_html(lead, bal, link, 'View my Rounds card', share))
+            sent = True
+        except Exception as e:
+            shop.log_email_error('customer subscribe email', e)
+    return {'email': email, 'emailed': sent, 'already': bool(row)}

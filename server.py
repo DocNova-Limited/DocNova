@@ -294,6 +294,8 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError('Unknown action.')
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
+            if path == '/admin/api/subscribe-customer':
+                return self.admin_reply(200, admin.subscribe_customer(data.get('email'), data.get('notify') is not False))
             if path == '/admin/api/stock':
                 n = inventory.set_received(data.get('changes'))
                 inventory.check_alerts()

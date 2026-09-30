@@ -281,7 +281,10 @@ async function open(email) {
     el('section', {class: 'card'}, el('h3', {}, 'Summary'),
       el('ul', {class: 'list'},
         li('Paid website orders', s.orders), li('Scrub sets / tops / trousers', s.sets + ' / ' + s.tops + ' / ' + s.trousers),
-        li('Spent on website', gbp(s.spent_pence || 0)), li('Newsletter', s.subscriber ? (SUB[s.subscriber] || [s.subscriber])[0] : 'No'),
+        li('Spent on website', gbp(s.spent_pence || 0)), el('li', {}, el('span', {}, 'Newsletter'), s.subscriber ? el('strong', {}, (SUB[s.subscriber] || [s.subscriber])[0])
+          : el('button', {type: 'button', class: 'gold', style: 'padding:7px 12px;font-size:13px', onclick: async () => {
+              if (!confirm('Add ' + email + ' to the newsletter and email them a confirmation with their Rounds card?')) return;
+              try { const r = await api('subscribe-customer', {email}); alert(r.emailed ? 'Added — confirmation email sent.' : 'Added to the newsletter.'); await load(); open(email); } catch (e) { alert(e.message); } }}, 'Add to newsletter')),
         li('Joined Rounds', s.member ? day(s.joined_at) : 'Not yet'), li('Referral code', d.ref_code || '—'),
         li('Referred by', d.referred_by || '—'), li('Colleagues they referred', d.referred.length ? d.referred.join(', ') : 'None'))),
     el('section', {class: 'card'}, el('h3', {}, 'Free-set codes'),
