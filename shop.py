@@ -32,7 +32,8 @@ DELIVERY = {
 COUPONS = {'FIRSTSHIFT10': {'stripe_id': 'docnova-firstshift10', 'percent_off': 10, 'name': 'FIRSTSHIFT10 · 10% off products'}}  # WELCOME10 retired 29 Sep 2026
 
 def load_private_codes():
-    for part in os.getenv('DOCNOVA_PRIVATE_CODES', '').split(','):
+    raw = os.getenv('DOCNOVA_PRIVATE_CODES', '') + ',' + os.getenv('DOCNOVA_OWNER_CODES', '')  # owner's personal codes kept separate
+    for part in raw.split(','):
         m = re.fullmatch(r'\s*([A-Za-z0-9]{3,20})\s*:\s*(\d{1,2})\s*', part)
         if m and 0 < int(m.group(2)) < 100:
             code = m.group(1).upper()
