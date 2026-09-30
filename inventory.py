@@ -1,7 +1,8 @@
-"""DocNova stock: what came in, what has sold, what is left — by fit, colour, size, top and trousers.
+"""DocNova stock, kept as individual pieces: what came in, what has sold, what is left.
 
-  * "Stock received" is set by the owner in /admin -> Stock (starts from the September 2026 delivery sheet:
-    1,100 sets = 600 women's + 500 men's; a set is one top + one pair of trousers).
+  * Opening stock (September 2026 delivery): 2,200 scrub pieces — 600 women's tops, 600 women's trousers,
+    500 men's tops, 500 men's trousers, by colour and size — plus 100 DocNova Upper Arm Blood Pressure
+    Monitors and 97 DocNova Infrared Thermometers. The owner can change any number in /admin -> Stock.
   * Sold is worked out live from every paid sale (website orders and invoices). A set uses one top and one
     pair of trousers. Items handed back through Return / refund go back into stock.
   * When an item falls to 50%, 25% and 10% of what was received (and when it runs out), info@docnova.co.uk
@@ -23,19 +24,23 @@ OPENING = {
     'Men': {'Black': _M100, 'Navy Blue': _M100, 'Royal Blue': _M100, 'Pewter Grey': _M100, 'Green': _M100},
 }
 
+DEVICES = {'DocNova Upper Arm Blood Pressure Monitor': 100, 'DocNova Infrared Thermometer': 97}
+
 def key(fit, color, size, piece):
     return '|'.join((fit, color, size, piece))
 
 def init_db():
     with shop._lock, shop.db() as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS stock_levels (key TEXT PRIMARY KEY, qty INTEGER NOT NULL, updated_at INTEGER)')
-        if not conn.execute('SELECT 1 FROM stock_levels LIMIT 1').fetchone():
-            now = int(time.time())
-            for fit, colours in OPENING.items():
-                for color, sizes in colours.items():
-                    for size, n in sizes.items():
-                        for piece in ('top', 'trousers'):
-                            conn.execute('INSERT INTO stock_levels VALUES (?,?,?)', (key(fit, color, size, piece), n, now))
+        # Opening stock is only filled in where nothing is recorded yet, so the owner's own updates are never overwritten.
+        now = int(time.time())
+        for fit, colours in OPENING.items():
+            for color, sizes in colours.items():
+                for size, n in sizes.items():
+                    for piece in ('top', 'trousers'):
+                        conn.execute('INSERT OR IGNORE INTO stock_levels VALUES (?,?,?)', (key(fit, color, size, piece), n, now))
+        for name, n in DEVICES.items():
+            conn.execute('INSERT OR IGNORE INTO stock_levels VALUES (?,?,?)', (key('Device', name, 'Standard', 'device'), n, now))
 
 def _pieces(line, cat):
     """What leaves the shelf for one order line: [(key, qty)]."""
@@ -128,11 +133,15 @@ def check_alerts():
         if r['fit'] in ('Women', 'Men') and r['received'] > 0:
             g = groups.setdefault((r['fit'], r['piece']), {'received': 0, 'left': 0})
             g['received'] += r['received']; g['left'] += r['left']
+    allp = {'received': sum(g['received'] for g in groups.values()), 'left': sum(g['left'] for g in groups.values())}
+    if allp['received']:
+        groups[('All', 'pieces')] = allp
     for (fit, piece), g in groups.items():
         crossed = [x for x in LEVELS if g['left'] <= g['received'] * x / 100.0] + ([0] if g['left'] <= 0 else [])
         new = [lv for lv in crossed if guard._once('stock-total:%s:%s:%d:%d' % (fit, piece, g['received'], lv))]
         if new:
-            hits.append((min(new), 'ALL %s’s %s (overall)' % (fit.upper(), 'tops' if piece == 'top' else 'trousers'), g))
+            label = 'ALL SCRUB PIECES (overall)' if fit == 'All' else 'ALL %s’S %s (overall)' % (fit.upper(), 'TOPS' if piece == 'top' else 'TROUSERS')
+            hits.append((min(new), label, g))
     if not hits:
         return 0
     lines = []

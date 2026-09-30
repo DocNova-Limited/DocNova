@@ -111,7 +111,7 @@ button.big{padding:15px 22px;font-size:15px}
 <main id="app" hidden>
   <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
   <div id="tab-stock" hidden>
-    <div class="help"><strong>Stock updates itself.</strong> Every paid sale (website or invoice) takes the items off; returned items go back on. A scrub set uses one top and one pair of trousers. You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
+    <div class="help"><strong>Stock is kept as individual pieces and updates itself.</strong> Every paid sale (website or invoice) takes the pieces off; returned items go back on. (If a set is sold, its top and its trousers are each taken off.) You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
     <div class="stats" id="stockStats"></div>
     <div class="tools"><div class="chips" id="stockFit"></div><label class="check" style="margin:0"><input type="checkbox" id="stockLow"> <span>Only show low stock</span></label>
       <span style="flex:1"></span><button class="ghost" type="button" id="stockEdit" style="color:var(--navy)">Update stock</button></div>
@@ -588,10 +588,11 @@ function renderStock() {
   const tot = (fit, piece) => rows.filter(r => r.fit === fit && r.piece === piece).reduce((a, r) => ({rec: a.rec + r.received, left: a.left + r.left, sold: a.sold + r.sold - r.returned}), {rec: 0, left: 0, sold: 0});
   const card = (label, t) => { const lv = lvOf(t.left, t.rec); return el('div', {class: 'stat'}, el('small', {}, label), el('strong', {}, t.left.toLocaleString()), el('span', {class: 'muted'}, ' of ' + t.rec.toLocaleString() + ' · ' + t.sold + ' sold'),
     el('div', {class: 'bar2'}, el('i', {style: 'width:' + (t.rec ? Math.max(0, Math.min(100, 100 * t.left / t.rec)) : 0) + '%;background:' + LVCOL[lv]}))); };
-  const lowCount = rows.filter(r => r.fit !== 'Device' && ['50', '25', '10', 'out'].includes(r.level)).length;
-  const sets = rows.filter(r => r.piece === 'top' && r.fit !== 'Device').reduce((a, r) => { const tr = rows.find(x => x.key === r.key.replace('|top', '|trousers')); return a + Math.max(0, Math.min(r.left, tr ? tr.left : 0)); }, 0);
-  $('#stockStats').replaceChildren(card('Women’s tops', tot('Women', 'top')), card('Women’s trousers', tot('Women', 'trousers')), card('Men’s tops', tot('Men', 'top')), card('Men’s trousers', tot('Men', 'trousers')),
-    el('div', {class: 'stat'}, el('small', {}, 'Complete sets available'), el('strong', {}, sets.toLocaleString())),
+  const lowCount = rows.filter(r => ['50', '25', '10', 'out'].includes(r.level)).length;
+  const scrubs = rows.filter(r => r.fit === 'Women' || r.fit === 'Men').reduce((a, r) => ({rec: a.rec + r.received, left: a.left + r.left, sold: a.sold + r.sold - r.returned}), {rec: 0, left: 0, sold: 0});
+  const dev = n => { const r = rows.find(x => x.key === 'Device|' + n + '|Standard|device'); return r ? {rec: r.received, left: r.left, sold: r.sold - r.returned} : {rec: 0, left: 0, sold: 0}; };
+  $('#stockStats').replaceChildren(card('All scrub pieces', scrubs), card('Women’s tops', tot('Women', 'top')), card('Women’s trousers', tot('Women', 'trousers')), card('Men’s tops', tot('Men', 'top')), card('Men’s trousers', tot('Men', 'trousers')),
+    card('Blood pressure monitors', dev('DocNova Upper Arm Blood Pressure Monitor')), card('Infrared thermometers', dev('DocNova Infrared Thermometer')),
     el('div', {class: 'stat'}, el('small', {}, 'Items at 50% or less'), el('strong', {style: lowCount ? 'color:#b42318' : ''}, lowCount)));
   $('#stockFit').replaceChildren(...['All', 'Women', 'Men'].map(f => el('button', {type: 'button', class: 'chip' + (stockFit === f ? ' on' : ''), onclick: () => { stockFit = f; renderStock(); }}, f === 'All' ? 'All scrubs' : f + '’s')));
   // colour cards
@@ -605,11 +606,12 @@ function renderStock() {
       if (low && !stockEditing && !sizeRows.some(x => ['50', '25', '10', 'out'].includes(x.t.level) || ['50', '25', '10', 'out'].includes(x.p.level))) return null;
       const cell = r => stockEditing ? el('input', {type: 'number', min: 0, value: r.received, 'data-key': r.key, 'data-orig': r.received})
         : el('span', {class: 'lv ' + LVCLS[r.level], title: r.received ? r.pct + '% left' : ''}, r.left + ' / ' + r.received);
-      const tRec = sizeRows.reduce((a, x) => a + x.t.received, 0), tLeft = sizeRows.reduce((a, x) => a + x.t.left, 0);
-      return el('div', {class: 'colour'}, el('h4', {}, el('i', {class: 'sw', style: 'background:' + (SWC[color] || '#ccc')}), fit + '’s ' + color, el('small', {}, tLeft + ' of ' + tRec + ' tops left')),
-        el('div', {style: 'overflow-x:auto'}, el('table', {class: 'stk'}, el('thead', {}, el('tr', {}, el('th', {}, 'Size'), el('th', {}, stockEditing ? 'Tops received' : 'Tops left'), el('th', {}, stockEditing ? 'Trousers received' : 'Trousers left'), el('th', {}, 'Complete sets'), el('th', {}, 'Sold (tops / trousers)'))),
+      const sum = (f, piece) => sizeRows.reduce((a, x) => a + x[piece][f], 0);
+      return el('div', {class: 'colour'}, el('h4', {}, el('i', {class: 'sw', style: 'background:' + (SWC[color] || '#ccc')}), fit + '’s ' + color,
+          el('small', {}, 'Tops ' + sum('left', 't') + ' of ' + sum('received', 't') + ' · Trousers ' + sum('left', 'p') + ' of ' + sum('received', 'p'))),
+        el('div', {style: 'overflow-x:auto'}, el('table', {class: 'stk'}, el('thead', {}, el('tr', {}, el('th', {}, 'Size'), el('th', {}, stockEditing ? 'Tops received' : 'Tops left'), el('th', {}, stockEditing ? 'Trousers received' : 'Trousers left'), el('th', {}, 'Pieces left'), el('th', {}, 'Sold (tops / trousers)'))),
           el('tbody', {}, sizeRows.map(x => el('tr', {}, el('td', {}, el('strong', {}, x.z)), el('td', {}, cell(x.t)), el('td', {}, cell(x.p)),
-            el('td', {}, Math.max(0, Math.min(x.t.left, x.p.left))), el('td', {class: 'muted'}, (x.t.sold - x.t.returned) + ' / ' + (x.p.sold - x.p.returned))))))));
+            el('td', {}, Math.max(0, x.t.left) + Math.max(0, x.p.left)), el('td', {class: 'muted'}, (x.t.sold - x.t.returned) + ' / ' + (x.p.sold - x.p.returned))))))));
     }).filter(Boolean);
     if (cards.length) blocks.push(el('h3', {class: 'sub'}, fit + '’s scrubs'), ...cards);
   }
