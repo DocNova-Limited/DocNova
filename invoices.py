@@ -432,7 +432,20 @@ def _email_extras(inv):
         out += '<p style="margin:14px 0 0;color:#182130;font-weight:600">%s %s</p>' % (_esc(t[0]), _esc(t[1]))
     return out
 
-def send(number):
+def send_copy(number, to):
+    """Send the owner an exact copy of the email this customer received (invoice email, or paid receipt)."""
+    inv = get(number)
+    if not inv or not inv['email']:
+        raise ValueError('This invoice has no customer email, so no email was sent to them.')
+    if inv['status'] == 'unpaid':
+        return send(number, to=to) and 'invoice'
+    if inv['status'] == 'paid':
+        if not send_receipt(number, to=to):
+            raise ValueError('The copy could not be sent — please check the email settings.')
+        return 'receipt'
+    raise ValueError('This invoice was cancelled.')
+
+def send(number, to=None):
     inv = get(number)
     if not inv or not inv['email'] or inv['status'] != 'unpaid':
         raise ValueError('This invoice cannot be emailed (no email address, or it is not unpaid).')
@@ -451,13 +464,14 @@ def send(number):
             'Once it is paid, your purchase is added to your DocNova Rounds card automatically.\n\nDocNova Ltd · Cambridge, UK\n'
             % (first, inv['number'], shop.money(inv['total']), (', due by ' + due) if due else '', url,
                ('Bank transfer (reference ' + inv['number'] + '):\n' + bank_details() + '\n\n') if bank_details() else ''))
-    shop.send_mail(inv['email'], 'DocNova invoice %s — %s' % (inv['number'], shop.money(inv['total'])), text,
+    shop.send_mail(to or inv['email'], ('[Copy] ' if to else '') + 'DocNova invoice %s — %s' % (inv['number'], shop.money(inv['total'])), text,
                    _email_html(inv, base, 'Your DocNova invoice', lead, 'View & pay invoice', url))
-    with shop._lock, shop.db() as conn:
-        conn.execute('UPDATE invoices SET sent_at=? WHERE number=?', (int(time.time()), number))
+    if not to:
+        with shop._lock, shop.db() as conn:
+            conn.execute('UPDATE invoices SET sent_at=? WHERE number=?', (int(time.time()), number))
     return True
 
-def send_receipt(number):
+def send_receipt(number, to=None):
     inv = get(number)
     if not inv or not inv['email'] or not shop.smtp_configured():
         return False
@@ -483,7 +497,7 @@ def send_receipt(number):
     text = 'Thank you, we have received your payment of %s for invoice %s.\n\n%s\n\nYour paid invoice: %s\n%s\nDocNova Ltd · Cambridge, UK\n' % (
         shop.money(inv['total']), inv['number'], progress, url, ('Your Rounds card: ' + card + '\n') if card else '')
     try:
-        shop.send_mail(inv['email'], 'Thank you for your DocNova order — receipt ' + inv['number'], text,
+        shop.send_mail(to or inv['email'], ('[Copy] ' if to else '') + 'Thank you for your DocNova order — receipt ' + inv['number'], text,
                        _email_html(inv, base, 'Thank you for your order', lead, 'View / print your receipt', url, extra))
     except Exception as e:
         shop.log_email_error('receipt for ' + number, e)

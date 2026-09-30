@@ -349,7 +349,7 @@ function renderInvoices() {
       ev.stopPropagation();
       if (body.action === 'paid') { const m = prompt('How was ' + i.number + ' paid? Type: bank, cash or card', 'bank'); if (!m) return; body.method = m.trim().toLowerCase(); }
       else if (!confirm(label + ' — ' + i.number + '?')) return;
-      try { await api('invoice/action', {number: i.number, ...body}); await loadInvoices(); load(); } catch (e) { alert(e.message); }
+      try { const r = await api('invoice/action', {number: i.number, ...body}); if (r.copy) { alert('A copy of the ' + (r.copy === 'invoice' ? 'invoice email' : 'paid receipt email') + ' ' + i.customer_name + ' received has been sent to ' + r.to + '.'); return; } await loadInvoices(); load(); } catch (e) { alert(e.message); }
     }}, label);
     return el('tr', {}, el('td', {}, el('strong', {}, i.number), i.source === 'import' ? el('div', {class: 'muted'}, 'past sale') : ''),
       el('td', {}, day(i.issue_date)), el('td', {}, i.customer_name, el('div', {class: 'muted'}, i.email || 'no email')),
@@ -358,6 +358,7 @@ function renderInvoices() {
         i.status === 'unpaid' && i.due_at && i.due_at * 1000 < Date.now() ? el('div', {class: 'muted', style: 'color:#b42318'}, 'overdue') : ''),
       el('td', {}, el('div', {class: 'acts'}, el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/invoice/' + i.token, target: '_blank', rel: 'noopener'}, 'View'),
         i.status === 'unpaid' ? [act('Mark paid', {action: 'paid'}, 'gold'), i.email ? act('Email again', {action: 'resend'}) : '', act('Cancel', {action: 'cancel'})] : '',
+        i.email && i.status !== 'cancelled' ? act('Email me a copy', {action: 'copy'}) : '',
         i.status === 'paid' ? [el('button', {type: 'button', class: 'gold', onclick: ev => { ev.stopPropagation(); returnDialog(i.order_number); }}, 'Return / refund'),
           i.refunded ? '' : act('Undo paid', {action: 'undo'})] : '')));
   }) : [el('tr', {}, el('td', {colspan: 6, class: 'muted'}, 'No invoices yet.'))]));

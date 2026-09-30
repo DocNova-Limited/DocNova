@@ -306,6 +306,10 @@ class Handler(SimpleHTTPRequestHandler):
                     inv = invoices.cancel(number)
                 elif action == 'resend':
                     invoices.send(number); inv = invoices.get(number)
+                elif action == 'copy':
+                    to = os.getenv('DOCNOVA_OWNER_EMAIL') or 'info@docnova.co.uk'
+                    kind = invoices.send_copy(number, to); inv = invoices.get(number)
+                    return self.admin_reply(200, {'number': inv['number'], 'status': inv['status'], 'copy': kind, 'to': to})
                 else:
                     raise ValueError('Unknown action.')
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
