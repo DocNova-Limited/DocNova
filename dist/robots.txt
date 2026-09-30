@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /invoice/
+Disallow: /unsubscribe
+
+Sitemap: https://docnova.co.uk/sitemap.xml
