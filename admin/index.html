@@ -9,6 +9,18 @@
 :root{--navy:#182130;--ink:#101826;--gold:#d9b97f;--blue:#004c9b;--bg:#f3f1ec;--card:#fff;--line:#e4e0d8;--muted:#6b7280;--ok:#1d7a46;--warn:#9a5b00;--bad:#b42318}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;font-size:12px}
+.lv{display:inline-block;padding:3px 10px;border-radius:14px;font-weight:600}
+.lv.ok{background:#e5f3ea;color:#1d7a46}.lv.l50{background:#fff3cf;color:#8a6100}.lv.l25{background:#ffe2c7;color:#a24b00}.lv.l10{background:#fde0dc;color:#b42318}.lv.out{background:#b42318;color:#fff}.lv.none{background:#f1f1f1;color:#777}
+.colour{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.colour h4{margin:0 0 8px;display:flex;align-items:center;gap:10px;font-size:16px}
+.colour h4 .sw{width:18px;height:18px;border-radius:50%;border:1px solid #0002;display:inline-block}
+.colour h4 small{color:var(--muted);font-weight:400;font-size:13px}
+.stk{width:100%;min-width:0;border-collapse:collapse}.stk th,.stk td{padding:7px 8px;border-bottom:1px solid #eee9e0;text-align:center;white-space:nowrap}.stk th:first-child,.stk td:first-child{text-align:left}
+.stk input{width:70px;padding:6px 8px;text-align:center}
+.bar2{height:6px;background:#ece8df;border-radius:6px;overflow:hidden;margin-top:8px}.bar2 i{display:block;height:100%}
+h3.sub{margin:26px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}
+
 body{margin:0;background:var(--bg);color:var(--navy);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
 header{background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header b{font:600 12px/1 Arial;letter-spacing:.2em;color:var(--gold)}
@@ -97,7 +109,17 @@ button.big{padding:15px 22px;font-size:15px}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div id="tab-stock" hidden>
+    <div class="help"><strong>Stock updates itself.</strong> Every paid sale (website or invoice) takes the items off; returned items go back on. A scrub set uses one top and one pair of trousers. You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
+    <div class="stats" id="stockStats"></div>
+    <div class="tools"><div class="chips" id="stockFit"></div><label class="check" style="margin:0"><input type="checkbox" id="stockLow"> <span>Only show low stock</span></label>
+      <span style="flex:1"></span><button class="ghost" type="button" id="stockEdit" style="color:var(--navy)">Update stock</button></div>
+    <div class="legend"><span class="lv ok">Good</span><span class="lv l50">50% or less</span><span class="lv l25">25% or less</span><span class="lv l10">10% or less</span><span class="lv out">Sold out</span></div>
+    <div id="stockBody"></div>
+    <h3 class="sub">Medical devices</h3><div id="stockDevices"></div>
+    <h3 class="sub">Stock history</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Date</th><th>What happened</th><th>Customer</th><th>Items</th><th class="num">Pieces</th></tr></thead><tbody id="stockHistory"></tbody></table></div>
+  </div>
   <div id="tab-approvals" hidden>
     <div class="help"><strong>Nothing is given away without you.</strong> Free sets wait here until you approve them — the customer only receives their code after you press <em>Approve</em>. Referrals that look suspicious (same name, phone, address or email as the referrer or an existing customer) are held here too, and info@docnova.co.uk gets an email about each one.</div>
     <div id="apList"></div>
@@ -283,7 +305,8 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals';
+  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock';
+  if (b.dataset.tab === 'stock') loadStock();
   if (b.dataset.tab === 'approvals') loadApprovals();
   if (b.dataset.tab === 'invoices') loadInvoices();
   if (b.dataset.tab === 'sales') loadSales();
@@ -323,7 +346,7 @@ function renderInvoices() {
   }) : [el('tr', {}, el('td', {colspan: 6, class: 'muted'}, 'No invoices yet.'))]));
 }
 $('#newInv').addEventListener('click', startSale);
-async function startSale() { if (!INV.catalogue.length) { try { INV = await api('invoices'); } catch (e) { return; } } newInvoice(); }
+async function startSale() { try { if (!INV.catalogue.length) INV = await api('invoices'); STOCK = await api('stock'); } catch (e) { return; } newInvoice(); }
 function newInvoice() {
   const inp = (attrs) => el('input', attrs);
   const today = new Date().toISOString().slice(0, 10);
@@ -356,8 +379,20 @@ function newInvoice() {
       el('label', {}, (isDev ? '3' : '5') + '. How many?'),
       el('div', {class: 'chips'}, el('button', {type: 'button', class: 'chip', onclick: () => { pick.qty = Math.max(1, pick.qty - 1); drawPicker(); }}, '−'),
         el('span', {class: 'qty'}, pick.qty), el('button', {type: 'button', class: 'chip', onclick: () => { pick.qty = Math.min(50, pick.qty + 1); drawPicker(); }}, '+')),
-      el('div', {class: 'addrow'}, chosen ? el('div', {}, el('strong', {}, pick.qty + ' × ' + chosen.name + (isDev ? '' : ' · ' + pick.size)), el('div', {class: 'muted'}, gbp(chosen.pence) + ' each')) : el('span', {class: 'muted'}, 'Not available'),
+      el('div', {class: 'addrow'}, chosen ? el('div', {}, el('strong', {}, pick.qty + ' × ' + chosen.name + (isDev ? '' : ' · ' + pick.size)), el('div', {class: 'muted'}, gbp(chosen.pence) + ' each'), stockNote(chosen, isDev ? 'Standard' : pick.size)) : el('span', {class: 'muted'}, 'Not available'),
         el('button', {type: 'button', class: 'gold', disabled: !chosen, onclick: () => { addItem(chosen, isDev ? 'Standard' : pick.size, pick.qty); pick.qty = 1; drawPicker(); }}, '+ Add to sale'))].flat());
+  }
+  function stockNote(p, size) {
+    if (!STOCK) return '';
+    const find = (k) => STOCK.rows.find(r => r.key === k);
+    const pieces = p.device ? [['', 'Device|' + p.name + '|Standard|device']] : [
+      ...(p.category !== 'Pants' ? [['tops', [p.fit, p.color, size, 'top'].join('|')]] : []),
+      ...(p.category !== 'Tops' ? [['trousers', [p.fit, p.color, size, 'trousers'].join('|')]] : [])];
+    const parts = pieces.map(([label, k]) => { const r = find(k); return r && r.received ? {label, left: r.left, level: r.level} : null; }).filter(Boolean);
+    if (!parts.length) return '';
+    const worst = parts.reduce((a, x) => x.left < a.left ? x : a);
+    return el('div', {style: 'margin-top:4px'}, el('span', {class: 'lv ' + LVCLS[worst.level]}, 'In stock: ' + parts.map(x => x.left + (x.label ? ' ' + x.label : '')).join(' · ')),
+      worst.left < pick.qty ? el('span', {style: 'color:#b42318;font-size:13px;margin-left:8px'}, 'Not enough in stock for ' + pick.qty) : '');
   }
   // ---- basket
   const basket = el('div', {}), totals = el('div', {}), msg = el('p', {class: 'msg'});
@@ -530,6 +565,69 @@ async function decideReview(r, approve) {
   try { const x = await api('review', {id: r.id, approve, note}); alert(approve ? (x.code ? 'Approved — code ' + x.code + ' emailed to the customer.' : 'Approved.') : 'Declined.'); }
   catch (e) { alert(e.message); }
   loadApprovals(); load();
+}
+// ---------------------------------------------------------------- stock
+let STOCK = null, stockFit = 'All', stockEditing = false;
+const LVCLS = {ok: 'ok', '50': 'l50', '25': 'l25', '10': 'l10', out: 'out', none: 'none'};
+const LVCOL = {ok: '#1d7a46', '50': '#d9a300', '25': '#e07b00', '10': '#b42318', out: '#b42318', none: '#bbb'};
+const SWC = {'Navy Blue': '#1f2a44', 'Royal Blue': '#2456a6', 'Black': '#15171b', 'Burgundy': '#6d1f33', 'Green': '#2f5d50', 'Pewter Grey': '#7b8088', 'Pink': '#e7a6b8'};
+function lvOf(left, rec) { if (rec <= 0) return 'none'; if (left <= 0) return 'out'; const p = 100 * left / rec; return p <= 10 ? '10' : p <= 25 ? '25' : p <= 50 ? '50' : 'ok'; }
+async function loadStock() { try { STOCK = await api('stock'); if (!INV.catalogue.length) INV = await api('invoices'); } catch (e) { return; } renderStock(); }
+$('#stockLow').addEventListener('change', renderStock);
+$('#stockEdit').addEventListener('click', async () => {
+  if (!stockEditing) { stockEditing = true; renderStock(); return; }
+  const changes = {}; document.querySelectorAll('#tab-stock input[data-key]').forEach(i => { if (+i.value !== +i.dataset.orig) changes[i.dataset.key] = +i.value; });
+  if (!Object.keys(changes).length) { stockEditing = false; renderStock(); return; }
+  if (!confirm('Save ' + Object.keys(changes).length + ' stock change(s)?')) return;
+  try { await api('stock', {changes}); stockEditing = false; await loadStock(); alert('Stock updated.'); } catch (e) { alert(e.message); }
+});
+function renderStock() {
+  const rows = STOCK.rows, low = $('#stockLow').checked;
+  $('#stockEdit').textContent = stockEditing ? 'Save stock' : 'Update stock'; $('#stockEdit').className = stockEditing ? 'gold' : 'ghost';
+  // summary cards
+  const tot = (fit, piece) => rows.filter(r => r.fit === fit && r.piece === piece).reduce((a, r) => ({rec: a.rec + r.received, left: a.left + r.left, sold: a.sold + r.sold - r.returned}), {rec: 0, left: 0, sold: 0});
+  const card = (label, t) => { const lv = lvOf(t.left, t.rec); return el('div', {class: 'stat'}, el('small', {}, label), el('strong', {}, t.left.toLocaleString()), el('span', {class: 'muted'}, ' of ' + t.rec.toLocaleString() + ' · ' + t.sold + ' sold'),
+    el('div', {class: 'bar2'}, el('i', {style: 'width:' + (t.rec ? Math.max(0, Math.min(100, 100 * t.left / t.rec)) : 0) + '%;background:' + LVCOL[lv]}))); };
+  const lowCount = rows.filter(r => r.fit !== 'Device' && ['50', '25', '10', 'out'].includes(r.level)).length;
+  const sets = rows.filter(r => r.piece === 'top' && r.fit !== 'Device').reduce((a, r) => { const tr = rows.find(x => x.key === r.key.replace('|top', '|trousers')); return a + Math.max(0, Math.min(r.left, tr ? tr.left : 0)); }, 0);
+  $('#stockStats').replaceChildren(card('Women’s tops', tot('Women', 'top')), card('Women’s trousers', tot('Women', 'trousers')), card('Men’s tops', tot('Men', 'top')), card('Men’s trousers', tot('Men', 'trousers')),
+    el('div', {class: 'stat'}, el('small', {}, 'Complete sets available'), el('strong', {}, sets.toLocaleString())),
+    el('div', {class: 'stat'}, el('small', {}, 'Items at 50% or less'), el('strong', {style: lowCount ? 'color:#b42318' : ''}, lowCount)));
+  $('#stockFit').replaceChildren(...['All', 'Women', 'Men'].map(f => el('button', {type: 'button', class: 'chip' + (stockFit === f ? ' on' : ''), onclick: () => { stockFit = f; renderStock(); }}, f === 'All' ? 'All scrubs' : f + '’s')));
+  // colour cards
+  const blocks = [];
+  for (const fit of ['Women', 'Men']) {
+    if (stockFit !== 'All' && stockFit !== fit) continue;
+    const colours = [...new Set(rows.filter(r => r.fit === fit).map(r => r.color))];
+    const cards = colours.map(color => {
+      const get = (size, piece) => rows.find(r => r.fit === fit && r.color === color && r.size === size && r.piece === piece) || {received: 0, left: 0, sold: 0, returned: 0, level: 'none', key: [fit, color, size, piece].join('|')};
+      const sizeRows = STOCK.sizes.map(z => ({z, t: get(z, 'top'), p: get(z, 'trousers')}));
+      if (low && !stockEditing && !sizeRows.some(x => ['50', '25', '10', 'out'].includes(x.t.level) || ['50', '25', '10', 'out'].includes(x.p.level))) return null;
+      const cell = r => stockEditing ? el('input', {type: 'number', min: 0, value: r.received, 'data-key': r.key, 'data-orig': r.received})
+        : el('span', {class: 'lv ' + LVCLS[r.level], title: r.received ? r.pct + '% left' : ''}, r.left + ' / ' + r.received);
+      const tRec = sizeRows.reduce((a, x) => a + x.t.received, 0), tLeft = sizeRows.reduce((a, x) => a + x.t.left, 0);
+      return el('div', {class: 'colour'}, el('h4', {}, el('i', {class: 'sw', style: 'background:' + (SWC[color] || '#ccc')}), fit + '’s ' + color, el('small', {}, tLeft + ' of ' + tRec + ' tops left')),
+        el('div', {style: 'overflow-x:auto'}, el('table', {class: 'stk'}, el('thead', {}, el('tr', {}, el('th', {}, 'Size'), el('th', {}, stockEditing ? 'Tops received' : 'Tops left'), el('th', {}, stockEditing ? 'Trousers received' : 'Trousers left'), el('th', {}, 'Complete sets'), el('th', {}, 'Sold (tops / trousers)'))),
+          el('tbody', {}, sizeRows.map(x => el('tr', {}, el('td', {}, el('strong', {}, x.z)), el('td', {}, cell(x.t)), el('td', {}, cell(x.p)),
+            el('td', {}, Math.max(0, Math.min(x.t.left, x.p.left))), el('td', {class: 'muted'}, (x.t.sold - x.t.returned) + ' / ' + (x.p.sold - x.p.returned))))))));
+    }).filter(Boolean);
+    if (cards.length) blocks.push(el('h3', {class: 'sub'}, fit + '’s scrubs'), ...cards);
+  }
+  $('#stockBody').replaceChildren(...(blocks.length ? blocks : [el('p', {class: 'muted'}, low ? 'Nothing is low on stock. 👍' : 'No stock recorded yet.')]));
+  // devices
+  const devs = rows.filter(r => r.fit === 'Device');
+  const allDev = (INV.catalogue.length ? INV.catalogue : []).filter(p => p.device).map(p => p.name);
+  const names = [...new Set([...allDev, ...devs.map(d => d.color)])];
+  $('#stockDevices').replaceChildren(...(names.length ? [el('div', {class: 'colour'}, el('table', {class: 'stk'}, el('thead', {}, el('tr', {}, el('th', {}, 'Device'), el('th', {}, stockEditing ? 'Received' : 'Left'), el('th', {}, 'Sold'))),
+    el('tbody', {}, names.map(n => { const r = devs.find(d => d.color === n) || {received: 0, left: 0, sold: 0, returned: 0, level: 'none', key: 'Device|' + n + '|Standard|device'};
+      return el('tr', {}, el('td', {}, n), el('td', {}, stockEditing ? el('input', {type: 'number', min: 0, value: r.received, 'data-key': r.key, 'data-orig': r.received})
+        : (r.received ? el('span', {class: 'lv ' + LVCLS[r.level]}, r.left + ' / ' + r.received) : el('span', {class: 'muted'}, 'not tracked — add the number with Update stock'))), el('td', {}, r.sold - r.returned)); }))))]
+    : [el('p', {class: 'muted'}, 'Open the Invoices tab once to load the device list.')]));
+  // history
+  $('#stockHistory').replaceChildren(...(STOCK.history.length ? STOCK.history.map(m => el('tr', {}, el('td', {}, day(m.at)),
+    el('td', {}, el('span', {class: 'pill ' + (m.kind === 'sale' ? 'no' : 'ok')}, m.kind === 'sale' ? 'Sold' : 'Returned'), ' ', m.ref), el('td', {}, m.who),
+    el('td', {style: 'white-space:normal'}, m.items.join(', ')), el('td', {class: 'num', style: 'color:' + (m.pieces < 0 ? '#b42318' : '#1d7a46')}, (m.pieces > 0 ? '+' : '') + m.pieces)))
+    : [el('tr', {}, el('td', {colspan: 5, class: 'muted'}, 'No sales yet.'))]));
 }
 load();
 </script>

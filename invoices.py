@@ -171,6 +171,12 @@ def mark_paid(number, method, when=None, notify=True, payment_intent=None):
         conn.execute("UPDATE invoices SET status='paid', paid_at=?, paid_method=?, order_number=? WHERE number=? AND status<>'paid'",
                      (when, method, order_number, number))
     order = shop.get_order(order_number)
+    if not inv['email']:
+        try:
+            import inventory
+            inventory.check_alerts()
+        except Exception as e:
+            shop.log_email_error('stock check', e)
     if inv['email']:
         try:
             loyalty.earn_from_order(order)        # DocNova Rounds, exactly like a website order

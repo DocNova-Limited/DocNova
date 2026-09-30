@@ -30,8 +30,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS rounds_tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, expires_at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS rounds_ledger_email ON rounds_ledger(email);
         ''')
-    import guard
+    import guard, inventory
     guard.init_db()
+    inventory.init_db()
 
 def norm(email):
     email = str(email or '').strip().lower()
@@ -208,6 +209,11 @@ def order_halves(order):
 
 def earn_from_order(order):
     """Called once an order is paid. Safe to call repeatedly: every ledger row is unique per order."""
+    try:
+        import inventory
+        inventory.check_alerts()                  # low-stock emails (each level is only ever sent once)
+    except Exception as e:
+        shop.log_email_error('stock check', e)
     email = norm(order.get('email'))
     if not email:
         return None

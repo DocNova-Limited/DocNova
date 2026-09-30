@@ -255,13 +255,13 @@ def _once(key):
 def _base():
     return os.environ.get('DOCNOVA_PUBLIC_URL', 'https://docnova.co.uk').rstrip('/')
 
-def alert(subject, body):
+def alert(subject, body, tag='DocNova Rounds'):
     to = os.getenv('DOCNOVA_ADMIN_EMAIL') or os.getenv('DOCNOVA_FROM_EMAIL') or 'info@docnova.co.uk'
     if not shop.smtp_configured():
         shop.log_email_error('admin alert (email off)', Exception(subject))
         return False
     try:
-        shop.send_mail(to, '[DocNova Rounds] ' + subject, body + '\n\n— DocNova website')
+        shop.send_mail(to, '[' + tag + '] ' + subject, body + '\n\n— DocNova website')
         return True
     except Exception as e:
         shop.log_email_error('admin alert', e)
