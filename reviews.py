@@ -65,13 +65,13 @@ def build(order):
     devices_only = items and all((cat.get(l['id']) or {}).get('device') for l in items)
     thing = 'your DocNova order' if devices_only else 'your DocNova scrubs'
     lead = ('<p style="margin:0 0 14px">Hi %s,</p>'
-            '<p style="margin:0 0 14px">We hope you’re enjoying %s. As a small, family-run UK brand, every honest review makes a real difference — '
+            '<p style="margin:0 0 14px">We hope you’re enjoying %s. As a small, independent British brand, every honest review makes a real difference — '
             'it helps us improve, and helps fellow healthcare professionals choose with confidence.</p>'
             '<p style="margin:0 0 14px">If you have a minute, we’d be truly grateful if you shared your experience on Google.</p>'
             '<p style="margin:0;font-size:14px;color:#6b7280">If anything isn’t quite right, simply reply to this email and we’ll put it right. '
             'We’ll only ask once — thank you for being part of DocNova.</p>' % (escape(name), thing))
     html = invoices._email_html(None, base, 'How are you getting on?', lead, 'Leave a Google review', link)
-    text = ('Hi %s,\n\nWe hope you’re enjoying %s. As a small, family-run UK brand, every honest review makes a real difference — it helps us improve, '
+    text = ('Hi %s,\n\nWe hope you’re enjoying %s. As a small, independent British brand, every honest review makes a real difference — it helps us improve, '
             'and helps fellow healthcare professionals choose with confidence.\n\nIf you have a minute, we’d be truly grateful if you shared your '
             'experience on Google:\n%s\n\nIf anything isn’t quite right, simply reply to this email and we’ll put it right. We’ll only ask once.\n\n'
             'With thanks,\nThe DocNova team\ninfo@docnova.co.uk\n' % (name, thing, link))
