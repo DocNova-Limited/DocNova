@@ -6,7 +6,7 @@ Shared by server.py (the website) and orders.py (the order admin tool).
 from pathlib import Path
 from email.message import EmailMessage
 from urllib.parse import quote, urlencode
-import hashlib, hmac, json, os, re, secrets, smtplib, sqlite3, ssl, threading, time
+import calendar, hashlib, hmac, json, os, re, secrets, smtplib, sqlite3, ssl, threading, time
 import http.client, urllib.error, urllib.request
 
 ROOT = Path(__file__).resolve().parent
@@ -39,6 +39,22 @@ def load_private_codes():
             code = m.group(1).upper()
             COUPONS[code] = {'stripe_id': 'docnova-' + code.lower(), 'percent_off': int(m.group(2)),
                              'name': '%s · %s%% off products' % (code, m.group(2))}
+# Offers limited to one colour and a closing date. PINK15 is the Breast Cancer Awareness Month offer:
+# 15% off pink scrubs only, open to everyone, until the end of 31 October 2026 (UK time, which is GMT that night).
+SCOPED = {'PINK15': {'percent_off': 15, 'color': 'Pink', 'ends': calendar.timegm((2026, 11, 1, 0, 0, 0)),
+                     'ends_text': '31 October 2026', 'name': 'PINK15 · 15% off pink scrubs'}}
+
+def scoped_active(code):
+    spec = SCOPED.get(code)
+    return bool(spec) and time.time() < spec['ends']
+
+def scoped_discount(code, lines):
+    """Discount in pence: the percentage applies only to lines of the offer's colour (never to devices)."""
+    spec, cat = SCOPED[code], catalogue()
+    eligible = sum(l['unit_pence'] * l['qty'] for l in lines
+                   if (cat.get(l['id']) or {}).get('color') == spec['color'] and not (cat.get(l['id']) or {}).get('device'))
+    return (eligible * spec['percent_off'] + 50) // 100
+
 ORDER_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'  # no 0/O, 1/I/L: easy to read over the phone
 
 # ---------------------------------------------------------------- settings
@@ -131,6 +147,10 @@ def coupon_info(code):
     if code.startswith('ROUNDS-'):
         import loyalty
         return loyalty.reward_info(code)
+    if code in SCOPED:                        # colour-limited offer: the browser is told which colour it covers
+        spec = SCOPED[code]
+        return ({'code': code, 'percent_off': spec['percent_off'], 'only_color': spec['color'], 'ends_text': spec['ends_text']}
+                if scoped_active(code) else None)
     spec = COUPONS.get(code)
     if spec:
         return {'code': code, 'percent_off': spec['percent_off']}
@@ -171,6 +191,12 @@ def price_cart(raw_items, coupon='', delivery='uk'):
         if not loyalty.reward_info(code):
             raise ValueError('That DocNova Rounds code has already been used or has expired.')
         discount = loyalty.reward_discount(lines)
+    elif code in SCOPED:
+        if not scoped_active(code):
+            raise ValueError('%s ended on %s. Please remove the code to continue.' % (code, SCOPED[code]['ends_text']))
+        discount = scoped_discount(code, lines)
+        if not discount:                    # nothing of that colour in the bag: no discount, and no code on the order
+            code = ''
     elif code in COUPONS:
         discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100  # round half up, like the site
     else:
@@ -337,6 +363,23 @@ def ensure_reward_coupon(code, amount):
                                                   'max_redemptions': 1, 'name': 'DocNova Rounds · free scrub set'},
                           idempotency_key='coupon-' + cid)['id']
 
+def ensure_scoped_coupon(code, amount):
+    """Stripe coupon for a colour-limited code. Stripe's percentage coupons cover the whole basket, so the
+    discount worked out here is passed as a fixed amount; one coupon per amount, reused by later orders."""
+    cid = 'docnova-%s-%d' % (code.lower(), amount)
+    try:
+        return stripe_request('GET', '/v1/coupons/' + cid)['id']
+    except StripeError as e:
+        if e.status != 404:
+            raise
+    try:
+        return stripe_request('POST', '/v1/coupons', {'id': cid, 'amount_off': amount, 'currency': 'gbp', 'duration': 'once',
+                                                      'name': SCOPED[code]['name']}, idempotency_key='coupon-' + cid)['id']
+    except StripeError as e:
+        if e.code == 'resource_already_exists':
+            return cid
+        raise
+
 def ensure_coupon(code):
     """Create the Stripe coupon behind a site discount code the first time it is used."""
     spec = COUPONS.get(code)
@@ -392,7 +435,9 @@ def create_checkout_session(order_number, priced, base_url):
     if priced['coupon']:
         # Exactly one discount per order (allow_promotion_codes stays off, so no second code can be added at Stripe).
         params['discounts'] = [{'coupon': ensure_reward_coupon(priced['coupon'], priced['discount'])
-                                if priced['coupon'].startswith('ROUNDS-') else ensure_coupon(priced['coupon'])}]
+                                if priced['coupon'].startswith('ROUNDS-')
+                                else ensure_scoped_coupon(priced['coupon'], priced['discount']) if priced['coupon'] in SCOPED
+                                else ensure_coupon(priced['coupon'])}]
     session = stripe_request('POST', '/v1/checkout/sessions', params, idempotency_key='checkout-' + order_number)
     fields = {'checkout_session_id': session['id'], 'livemode': int(bool(session.get('livemode')))}
     if session.get('amount_total') is not None:

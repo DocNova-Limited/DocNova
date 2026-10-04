@@ -105,6 +105,8 @@ def create(data):
     if code:
         if code.startswith('ROUNDS-'):
             raise ValueError('A DocNova Rounds free-set code can only be used on the website.')
+        if code in shop.SCOPED:
+            raise ValueError('%s works at the website checkout only. For an invoice, type the discount amount instead.' % code)
         info = shop.coupon_info(code)
         if not info:
             raise ValueError('That discount code is not recognised (or has already been used).')
