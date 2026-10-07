@@ -165,30 +165,50 @@ def product_page(pid, size=None):
     if not p:
         return None
     size = size if size in sizes(p) and not p['device'] else None
-    page = (ROOT / 'dist' / 'index.html').read_text(encoding='utf-8')
     e, pics = html.escape, images(p)
-    name, desc, link, pic = title(p), description(p), url('p/' + p['id']), url(pics[0])
-    short = desc if len(desc) < 300 else desc[:297].rsplit(' ', 1)[0] + '…'
+    name, desc, pic = title(p), description(p), url(pics[0])
     hop = '/#/product/' + p['id'] + ('?size=' + size if size else '')
-    page = page.replace('<head>', '<head><base href="/"><script>history.replaceState(null,"",' + json.dumps(hop) + ')</script>', 1)
-    page = re.sub(r'<title>.*?</title>', lambda m: '<title>' + e(name) + ' | DocNova</title>', page, count=1)
-    page = re.sub(r'<link rel="canonical" href="[^"]*">', lambda m: '<link rel="canonical" href="' + link + '">', page, count=1)
-    for prop, value in (('og:type', 'product'), ('og:title', name + ' | DocNova'), ('og:description', short), ('og:url', link), ('og:image', pic)):
-        page = re.sub(r'<meta property="' + prop + r'" content="[^"]*">', lambda m: '<meta property="' + prop + '" content="' + e(value) + '">', page, count=1)
-    page = re.sub(r'<meta property="og:image:(width|height)" content="[^"]*">', '', page)
-    page = re.sub(r'<meta name="twitter:image" content="[^"]*">', lambda m: '<meta name="twitter:image" content="' + pic + '">', page, count=1)
-    page = re.sub(r'<meta name="description" content="[^"]*">', lambda m: '<meta name="description" content="' + e(short) + '">', page, count=1)
-    page = page.replace('</head>', '<script type="application/ld+json">' + structured(p, size) + '</script></head>', 1)
-    m = re.search(r'(<main id="app"[^>]*>)(.*?)(</main>)', page, flags=re.S)
     stock = any(in_stock(p, s) for s in ([size] if size else sizes(p)))
     summary = ('<div class="pdp"><div><img class="gallery-main" src="' + e(pics[0]) + '" alt="' + e(name) + '"></div>'
                '<div class="product-detail"><span class="eyebrow">' + ('MEDICAL ESSENTIALS' if p['device'] else 'DOCNOVA · ' + e(p['fit'].upper())) + '</span>'
                '<h1>' + e(name) + '</h1><p class="price">£' + money(p['pence']) + '</p><p>' + e(desc) + '</p>'
                + ('' if p['device'] else '<p class="fine">Sizes: ' + ', '.join(shop.SIZES) + '</p>')
                + '<p class="fine">' + ('In stock' if stock else 'Out of stock') + ' · UK delivery ' + ('free' if not delivery_pence(p) else '£' + money(delivery_pence(p)) + ', or free on orders of £70 or more')
-               + ' · 30-day returns</p></div></div>')
+               + ' · 30-day returns · <a href="/shipping">Delivery &amp; returns</a></p></div></div>')
+    return _wrap(hop, name, desc, url('p/' + p['id']), summary, kind='product', pic=pic, extra=structured(p, size))
+
+def _wrap(hop, name, desc, link, body, kind='website', pic=None, extra=None):
+    """The normal website page with this page's own title, description and wording in it, opened at the right place."""
+    page = (ROOT / 'dist' / 'index.html').read_text(encoding='utf-8')
+    e = html.escape
+    short = desc if len(desc) < 300 else desc[:297].rsplit(' ', 1)[0] + '…'
+    page = page.replace('<head>', '<head><base href="/"><script>history.replaceState(null,"",' + json.dumps(hop) + ')</script>', 1)
+    page = re.sub(r'<title>.*?</title>', lambda m: '<title>' + e(name) + ' | DocNova</title>', page, count=1)
+    page = re.sub(r'<link rel="canonical" href="[^"]*">', lambda m: '<link rel="canonical" href="' + link + '">', page, count=1)
+    for prop, value in (('og:type', kind), ('og:title', name + ' | DocNova'), ('og:description', short), ('og:url', link)) + ((('og:image', pic),) if pic else ()):
+        page = re.sub(r'<meta property="' + prop + r'" content="[^"]*">', lambda m: '<meta property="' + prop + '" content="' + e(value) + '">', page, count=1)
+    if pic:
+        page = re.sub(r'<meta property="og:image:(width|height)" content="[^"]*">', '', page)
+        page = re.sub(r'<meta name="twitter:image" content="[^"]*">', lambda m: '<meta name="twitter:image" content="' + pic + '">', page, count=1)
+    page = re.sub(r'<meta name="description" content="[^"]*">', lambda m: '<meta name="description" content="' + e(short) + '">', page, count=1)
+    if extra:
+        page = page.replace('</head>', '<script type="application/ld+json">' + extra + '</script></head>', 1)
+    m = re.search(r'(<main id="app"[^>]*>)(.*?)(</main>)', page, flags=re.S)
     # The home page banner is kept aside so the rest of the site still finds it when the visitor goes to Home.
-    return page[:m.start()] + m.group(1) + summary + m.group(3) + '<template id="home-hero">' + m.group(2) + '</template>' + page[m.end():]
+    return page[:m.start()] + m.group(1) + body + m.group(3) + '<template id="home-hero">' + m.group(2) + '</template>' + page[m.end():]
+
+def info_pages():
+    """The policy pages (delivery and returns, terms, privacy, contact...), exactly as the website shows them."""
+    src = (ROOT / 'dist' / 'app.js').read_text(encoding='utf-8')
+    return json.JSONDecoder().raw_decode(src[src.index('const texts=') + len('const texts='):])[0]
+
+def info_page(key):
+    t = info_pages().get(key)
+    if not t:
+        return None
+    plain = re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', t[1]))).strip()
+    body = '<div class="content policy"><h1>' + html.escape(t[0]) + '</h1>' + t[1] + '</div>'
+    return _wrap('/#/' + key, t[0], plain, url(key), body)
 
 # ---------------------------------------------------------------- Google feed and sitemap
 def _tag(name, value):
@@ -226,4 +246,5 @@ def sitemap():
     rows = ['<url><loc>%s/</loc><lastmod>%s</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>' % (SITE, day)]
     rows += ['<url><loc>%s</loc><lastmod>%s</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>' % (url('p/' + pid), day)
              for pid in products()]
+    rows += ['<url><loc>%s</loc><lastmod>%s</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>' % (url(key), day) for key in info_pages()]
     return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  ' + '\n  '.join(rows) + '\n</urlset>\n'

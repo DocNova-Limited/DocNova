@@ -175,6 +175,9 @@ class Handler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
             return self.send_text(page, 'text/html; charset=utf-8', 'no-cache')
+        info = seo.info_page(url.path.strip('/')) if re.fullmatch(r'/[a-z-]{3,30}/?', url.path) else None
+        if info:
+            return self.send_text(info, 'text/html; charset=utf-8', 'no-cache')
         if url.path == '/feeds/google.xml':
             return self.send_text(seo.feed(), 'application/xml; charset=utf-8', 'public, max-age=300')
         if url.path == '/sitemap.xml':
@@ -183,7 +186,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_HEAD(self):
         path = urlsplit(self.path).path
-        if path.startswith('/p/') or path in ('/feeds/google.xml', '/sitemap.xml'):
+        if path.startswith('/p/') or path in ('/feeds/google.xml', '/sitemap.xml') or path.strip('/') in seo.info_pages():
             return self.do_GET()
         return super().do_HEAD()
 
