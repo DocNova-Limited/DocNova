@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices, returns, guard, inventory, partners, reviews
+import shop, loyalty, admin, invoices, returns, guard, inventory, partners, reviews, seo
 from shop import ROOT, DB
 
 shop.init_db()
@@ -86,6 +86,16 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DocNova email preferences</title><body style="font:18px/1.6 Arial;max-width:580px;margin:70px auto;padding:24px;color:#182130">' + content + '</body></html>').encode())
 
+    def send_text(self, text, content_type, cache):
+        raw = text.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(raw)))
+        self.send_header('Cache-Control', cache)
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(raw)
+
     def base_url(self):
         if os.getenv('DOCNOVA_PUBLIC_URL'):
             return os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
@@ -155,7 +165,27 @@ class Handler(SimpleHTTPRequestHandler):
             return self.reply(200, shop.public_order(order))
         if url.path.startswith('/api/'):
             return self.reply(404, {'message': 'Not found'})
+        # Pages and lists for Google: one real page per product, the product feed and the sitemap.
+        product = re.fullmatch(r'/p/([a-z0-9-]{3,60})/?', url.path)
+        if product:
+            page = seo.product_page(product[1], parse_qs(url.query).get('size', [''])[0])
+            if not page:
+                self.send_response(302)
+                self.send_header('Location', '/#/shop')
+                self.end_headers()
+                return
+            return self.send_text(page, 'text/html; charset=utf-8', 'no-cache')
+        if url.path == '/feeds/google.xml':
+            return self.send_text(seo.feed(), 'application/xml; charset=utf-8', 'public, max-age=300')
+        if url.path == '/sitemap.xml':
+            return self.send_text(seo.sitemap(), 'application/xml; charset=utf-8', 'public, max-age=3600')
         return super().do_GET()
+
+    def do_HEAD(self):
+        path = urlsplit(self.path).path
+        if path.startswith('/p/') or path in ('/feeds/google.xml', '/sitemap.xml'):
+            return self.do_GET()
+        return super().do_HEAD()
 
     # ------------------------------------------------------------------ POST
     def do_POST(self):
