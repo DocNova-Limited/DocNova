@@ -9,7 +9,12 @@ import shop, inventory
 from shop import ROOT
 
 SITE = 'https://docnova.co.uk'
-FEED_DEVICES = False  # medical devices stay out of the Google feed until the owner confirms the paperwork
+FEED_DEVICES = True  # owner's decision, 7 Oct 2026, after the certificates and the MHRA register were checked
+# Barcodes printed on the device boxes, and Google's own category for each device.
+GTIN = {'blood-pressure-monitor': '6971522820329', 'infrared-thermometer': '6971522820022'}
+DEVICE_CATEGORY = {'blood-pressure-monitor': 'Health & Beauty > Health Care > Biometric Monitors > Blood Pressure Monitors',
+                   'infrared-thermometer': 'Health & Beauty > Health Care > Medical Thermometers'}
+MPN = {'blood-pressure-monitor': 'FC-BP113', 'infrared-thermometer': 'FC-IR100'}
 MATERIAL = '72% polyester, 21% rayon, 7% spandex'
 _cache = {'stamp': None, 'data': None}
 _stock = {'at': 0, 'left': {}}
@@ -138,6 +143,8 @@ def _variant(p, size, pics):
     v = {'@type': 'Product', 'name': title(p) + ('' if p['device'] else ' – Size ' + size), 'sku': sku(p, size),
          'description': description(p), 'image': [url(i) for i in pics[:6]], 'brand': {'@type': 'Brand', 'name': 'DocNova'},
          'offers': _offer(p, size, link)}
+    if p['id'] in GTIN:
+        v.update(gtin13=GTIN[p['id']], mpn=MPN[p['id']])
     if not p['device']:
         v.update(color=p['color'], size=size, material=MATERIAL,
                  audience={'@type': 'PeopleAudience', 'suggestedGender': 'female' if p['fit'] == 'Women' else 'male'})
@@ -228,10 +235,11 @@ def feed():
                     _tag('description', description(p)), _tag('link', link), _tag('image_link', url(pics[0]))]
             item += [_tag('additional_image_link', url(i)) for i in pics[1:11]]
             item += [_tag('availability', 'in_stock' if in_stock(p, size) else 'out_of_stock'), _tag('price', money(p['pence']) + ' GBP'),
-                     _tag('brand', 'DocNova'), _tag('condition', 'new'), _tag('identifier_exists', 'no'),
+                     _tag('brand', 'DocNova'), _tag('condition', 'new'),
+                     (_tag('gtin', GTIN[p['id']]) + _tag('mpn', MPN[p['id']])) if p['id'] in GTIN else _tag('identifier_exists', 'no'),
                      '<g:shipping>' + _tag('country', 'GB') + _tag('service', 'UK delivery') + _tag('price', money(delivery_pence(p)) + ' GBP') + '</g:shipping>']
             if p['device']:
-                item.append(_tag('product_type', 'Medical essentials'))
+                item += [_tag('product_type', 'Medical essentials'), _tag('google_product_category', DEVICE_CATEGORY.get(p['id'], 'Health & Beauty > Health Care'))]
             else:
                 item += [_tag('item_group_id', p['fit'].lower() + '-scrub-' + piece(p).lower()), _tag('color', p['color']), _tag('size', size),
                          _tag('gender', 'female' if p['fit'] == 'Women' else 'male'), _tag('age_group', 'adult'), _tag('material', MATERIAL),

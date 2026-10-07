@@ -8,7 +8,7 @@ import datetime, re
 from shop import DATA
 
 FOLDER = DATA / 'compliance'
-MAX_BYTES = 4 * 1024 * 1024
+MAX_BYTES = 12 * 1024 * 1024
 CHECKED = '2026-10-07'  # the day the certificates and the MHRA register were last read
 
 MANUFACTURER = {
@@ -46,6 +46,15 @@ DOCS = [
      'covers': 'Lists model FC-IR100; registered to be made and sold in China', 'from': '2025-11-10', 'until': '2027-11-09'},
 ]
 
+# Other private records kept with the certificates (no expiry date).
+RECORDS = [
+    {'key': 'supplier-record', 'title': 'Supplier record – Shenzhen Finicare',
+     'what': 'Summary of the order, the UK check, copies of the certificates and box artwork, and the full Alibaba chat (167 pages)'},
+    {'key': 'box-artwork-blood-pressure-monitor', 'title': 'Approved box artwork – blood pressure monitor', 'what': 'Shows the manufacturer, the CE 0123 mark and the barcode as printed'},
+    {'key': 'box-artwork-infrared-thermometer', 'title': 'Approved box artwork – infrared thermometer', 'what': 'Shows the manufacturer, the CE 0123 mark and the barcode as printed'},
+    {'key': 'mhra-register-entry', 'title': 'MHRA public register entry', 'what': 'Copy of the register page for Shenzhen Finicare, reference 23366, as seen on 7 October 2026'},
+]
+
 REGISTER = {
     'source': 'MHRA Public Access Registration Database (pard.mhra.gov.uk)', 'reference': '23366', 'registered': '2022-03-02',
     'uk_responsible_person': 'Wellkang Ltd, 16 Castle St., Dover, Kent, CT16 1PW',
@@ -60,7 +69,7 @@ def _days(iso):
     return (datetime.date.fromisoformat(iso) - datetime.date.today()).days
 
 def path(key):
-    if not any(d['key'] == key for d in DOCS):
+    if not any(d['key'] == key for d in DOCS + RECORDS):
         return None
     return FOLDER / (key + '.pdf')
 
@@ -69,14 +78,15 @@ def listing():
     for d in DOCS:
         p = path(d['key'])
         docs.append({**d, 'days_left': _days(d['until']), 'has_file': p.is_file(), 'bytes': p.stat().st_size if p.is_file() else 0})
-    return {'manufacturer': MANUFACTURER, 'devices': DEVICES, 'docs': docs, 'register': REGISTER, 'rules': RULES, 'checked': CHECKED}
+    records = [{**r, 'has_file': path(r['key']).is_file()} for r in RECORDS]
+    return {'records': records, 'manufacturer': MANUFACTURER, 'devices': DEVICES, 'docs': docs, 'register': REGISTER, 'rules': RULES, 'checked': CHECKED}
 
 def save(key, raw):
     p = path(key)
     if not p:
         raise ValueError('Unknown document.')
     if not raw.startswith(b'%PDF-') or len(raw) > MAX_BYTES:
-        raise ValueError('Please choose the PDF file for this certificate (up to 4 MB).')
+        raise ValueError('Please choose the PDF file for this certificate (up to 12 MB).')
     FOLDER.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix('.tmp')
     tmp.write_bytes(raw)

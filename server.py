@@ -326,7 +326,7 @@ class Handler(SimpleHTTPRequestHandler):
                 key = parse_qs(urlsplit(self.path).query).get('key', [''])[0]
                 return self.admin_reply(200, compliance.save(key, self.read_body(compliance.MAX_BYTES)))
             except ValueError as e:
-                return self.admin_reply(400, {'message': str(e) if str(e) != 'size' else 'Please choose the PDF file for this certificate (up to 4 MB).'})
+                return self.admin_reply(400, {'message': str(e) if str(e) != 'size' else 'Please choose the PDF file for this certificate (up to 12 MB).'})
         try:
             data = json.loads(self.read_body(32768).decode()) if int(self.headers.get('Content-Length', '0')) else {}
         except (ValueError, UnicodeError):
