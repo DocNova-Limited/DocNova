@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlsplit, parse_qs
 import json, os, re, secrets, sqlite3, time
-import shop, loyalty, admin, invoices, returns, guard, inventory, partners, reviews, seo
+import shop, loyalty, admin, invoices, returns, guard, inventory, partners, reviews, seo, compliance
 from shop import ROOT, DB
 
 shop.init_db()
@@ -288,6 +288,21 @@ class Handler(SimpleHTTPRequestHandler):
             self.admin_headers()
             self.end_headers()
             return self.wfile.write(raw)
+        if url.path == '/admin/api/compliance':
+            return self.admin_reply(200, compliance.listing())
+        if url.path == '/admin/api/compliance/file':
+            key = q.get('key', [''])[0]
+            f = compliance.path(key)
+            if not f or not f.is_file():
+                return self.admin_reply(404, {'message': 'This certificate has not been uploaded yet.'})
+            raw = f.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/pdf')
+            self.send_header('Content-Length', str(len(raw)))
+            self.send_header('Content-Disposition', 'inline; filename="%s"' % compliance.filename(key))
+            self.admin_headers()
+            self.end_headers()
+            return self.wfile.write(raw)
         if url.path == '/admin/api/export.csv':
             raw = admin.csv_export().encode('utf-8-sig')
             self.send_response(200)
@@ -304,6 +319,14 @@ class Handler(SimpleHTTPRequestHandler):
         origin = self.headers.get('Origin')
         if self.headers.get('X-DocNova-Admin') != '1' or (origin and urlsplit(origin).netloc != self.headers.get('Host')):
             return self.admin_reply(403, {'message': 'Forbidden'})
+        if path == '/admin/api/compliance/upload':  # a certificate PDF, sent as the file itself
+            if not admin.valid(self.headers.get('Cookie')):
+                return self.admin_reply(401, {'message': 'Please sign in.'})
+            try:
+                key = parse_qs(urlsplit(self.path).query).get('key', [''])[0]
+                return self.admin_reply(200, compliance.save(key, self.read_body(compliance.MAX_BYTES)))
+            except ValueError as e:
+                return self.admin_reply(400, {'message': str(e) if str(e) != 'size' else 'Please choose the PDF file for this certificate (up to 4 MB).'})
         try:
             data = json.loads(self.read_body(32768).decode()) if int(self.headers.get('Content-Length', '0')) else {}
         except (ValueError, UnicodeError):

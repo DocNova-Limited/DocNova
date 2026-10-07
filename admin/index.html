@@ -109,7 +109,7 @@ button.big{padding:15px 22px;font-size:15px}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="compliance">Device certificates</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
   <div id="tab-stock" hidden>
     <div class="help"><strong>Stock is kept as individual pieces and updates itself.</strong> Every paid sale (website or invoice) takes the pieces off; returned items go back on. (If a set is sold, its top and its trousers are each taken off.) You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
     <div class="stats" id="stockStats"></div>
@@ -132,6 +132,15 @@ button.big{padding:15px 22px;font-size:15px}
       <p id="ptMsg" class="msg"></p></section>
     <h3 class="sub">Batches</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Made</th><th>Batch</th><th>Partner</th><th class="num">Discount</th><th class="num">Codes</th><th class="num">Used</th><th>Status</th><th>Actions</th></tr></thead><tbody id="ptBatches"></tbody></table></div>
     <h3 class="sub">Orders with a student code</h3><div class="tablewrap"><table style="min-width:640px"><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Code</th><th class="num">Discount</th><th class="num">Paid</th></tr></thead><tbody id="ptUsed"></tbody></table></div>
+  </div>
+  <div id="tab-compliance" hidden>
+    <div class="help"><strong>Proof for the blood pressure monitor and the thermometer.</strong> This page keeps the manufacturer’s certificates and the UK register check in one place, so you can show them if a marketplace, a customer or an inspector asks. Only you can see it. Press <em>View</em> to open a certificate, or <em>Upload</em> to add or replace one. Certificates are kept on the website’s private disk.</div>
+    <div class="stats" id="cpStats"></div>
+    <section class="card" style="margin-bottom:16px"><h3 style="margin:0 0 6px">The devices</h3><div id="cpDevices"></div><p class="muted" id="cpMaker" style="white-space:normal"></p></section>
+    <div class="tablewrap"><table style="min-width:900px"><thead><tr><th>Document</th><th>Issued by</th><th>Number</th><th>Valid until</th><th>Status</th><th>File</th></tr></thead><tbody id="cpDocs"></tbody></table></div>
+    <section class="card" style="margin-top:16px"><h3 style="margin:0 0 6px">UK register (MHRA)</h3><div id="cpRegister" style="white-space:normal"></div></section>
+    <p class="muted" id="cpChecked" style="white-space:normal"></p>
+    <input type="file" id="cpFile" accept="application/pdf" hidden>
   </div>
   <div id="tab-approvals" hidden>
     <div class="help"><strong>Nothing is given away without you.</strong> Free sets wait here until you approve them — the customer only receives their code after you press <em>Approve</em>. Referrals that look suspicious (same name, phone, address or email as the referrer or an existing customer) are held here too, and info@docnova.co.uk gets an email about each one.</div>
@@ -321,13 +330,49 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock'; $('#tab-partners').hidden = b.dataset.tab !== 'partners';
+  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock'; $('#tab-partners').hidden = b.dataset.tab !== 'partners'; $('#tab-compliance').hidden = b.dataset.tab !== 'compliance';
   if (b.dataset.tab === 'partners') loadPartners();
+  if (b.dataset.tab === 'compliance') loadCompliance();
   if (b.dataset.tab === 'stock') loadStock();
   if (b.dataset.tab === 'approvals') loadApprovals();
   if (b.dataset.tab === 'invoices') loadInvoices();
   if (b.dataset.tab === 'sales') loadSales();
 }));
+// ------------------------------------------------------------ device certificates
+const isoDay = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'});
+let cpKey = '';
+async function loadCompliance() {
+  let d; try { d = await api('compliance'); } catch (e) { return; }
+  const next = d.docs.slice().sort((a, b) => a.days_left - b.days_left)[0];
+  $('#cpStats').replaceChildren(
+    stat('Certificates on file', d.docs.filter(x => x.has_file).length + ' of ' + d.docs.length),
+    stat('First to run out', isoDay(next.until)), stat('MHRA reference', d.register.reference));
+  $('#cpDevices').replaceChildren(...d.devices.map(v => el('p', {style: 'margin:6px 0;white-space:normal'},
+    el('strong', {}, v.name), ' · model ' + v.model + ' · ' + v['class'] + ' · barcode ' + v.barcode + ' · ' + v.udi + ' · ' + v.received)));
+  $('#cpMaker').textContent = 'Manufacturer: ' + d.manufacturer.name + ', ' + d.manufacturer.address + '. EU representative: ' + d.manufacturer.eu_rep + '.';
+  $('#cpDocs').replaceChildren(...d.docs.map(x => {
+    const st = x.days_left < 0 ? ['Run out', 'bad'] : x.days_left < 180 ? ['Renew soon', 'gold'] : ['In date', 'ok'];
+    return el('tr', {style: 'cursor:default'},
+      el('td', {style: 'white-space:normal'}, el('strong', {}, x.title), el('br'), el('span', {class: 'muted'}, x.covers)),
+      el('td', {style: 'white-space:normal'}, x.issuer), el('td', {}, x.number), el('td', {}, isoDay(x.until)),
+      el('td', {}, el('span', {class: 'pill ' + st[1]}, st[0])),
+      el('td', {}, x.has_file ? el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/admin/api/compliance/file?key=' + x.key, target: '_blank', rel: 'noopener'}, 'View') : el('span', {class: 'pill no'}, 'Not uploaded'), ' ',
+        el('button', {class: 'ghost', type: 'button', style: 'color:var(--navy)', 'data-upload': x.key, onclick: () => { cpKey = x.key; $('#cpFile').value = ''; $('#cpFile').click(); }}, x.has_file ? 'Replace' : 'Upload')));
+  }));
+  $('#cpRegister').replaceChildren(
+    el('p', {style: 'margin:6px 0'}, d.manufacturer.name + ' · MHRA reference ' + d.register.reference + ' · registered ' + isoDay(d.register.registered)),
+    el('p', {style: 'margin:6px 0'}, 'UK Responsible Person: ' + d.register.uk_responsible_person),
+    ...d.register.devices.map(t => el('p', {style: 'margin:6px 0'}, '✓ ' + t)),
+    el('p', {class: 'muted', style: 'margin:6px 0'}, d.register.note + ' Source: ' + d.register.source + '.'));
+  $('#cpChecked').textContent = d.rules + ' Last checked ' + isoDay(d.checked) + '.';
+}
+$('#cpFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f || !cpKey) return;
+  const r = await fetch('/admin/api/compliance/upload?key=' + encodeURIComponent(cpKey), {method: 'POST', headers: {'Content-Type': 'application/pdf', 'X-DocNova-Admin': '1'}, body: f});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) alert(data.message || 'The file could not be saved.');
+  loadCompliance();
+});
 let INV = {invoices: [], catalogue: [], sizes: []};
 const ST = {unpaid: ['Unpaid', 'no'], paid: ['Paid', 'ok'], cancelled: ['Cancelled', 'bad']};
 const METHOD = {bank: 'bank transfer', cash: 'cash', card: 'card'};
