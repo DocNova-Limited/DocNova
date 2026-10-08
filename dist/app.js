@@ -183,14 +183,14 @@ function reviewsSummary(rating,count,links,mapsUrl,note){const n=count||0;
  return `<span class="eyebrow">GOOGLE REVIEWS</span><h2>Worn on shift.<br><em>Rated on Google.</em></h2><div class="gr-score"><span class="gr-num">${(Number(rating)||0).toFixed(1)}</span><div>${starsMarkup(rating,'Average rating '+(Number(rating)||0).toFixed(1)+' out of 5')}<small>Based on ${n} Google review${n===1?'':'s'}</small></div></div><div class="gr-actions"><a class="btn outline" href="${esc(mapsUrl||links.maps)}" target="_blank" rel="noopener">Read all reviews on Google ↗</a><a class="text-link" href="${esc(links.write)}" target="_blank" rel="noopener">Write a review</a></div><p class="fine gr-note">${note}</p>`}
 function reviewsMarkup(d){const links=d.links||{};
  if(d.live&&d.reviews&&d.reviews.length){
-  // Highest-rated first, then newest; four fit the layout. The note below says so, as Google's policy asks.
-  const top=[...d.reviews].sort((a,b)=>(b.rating||0)-(a.rating||0)||String(b.published||'').localeCompare(String(a.published||''))).slice(0,4);
+  // Highest-rated first, then newest; six fit the layout. The note below says so, as Google's policy asks.
+  const top=[...d.reviews].sort((a,b)=>(b.rating||0)-(a.rating||0)||String(b.published||'').localeCompare(String(a.published||''))).slice(0,6);
   return {summary:reviewsSummary(d.rating,d.count,links,d.maps_url,'Live from Google Maps, updated hourly. Showing our highest-rated recent reviews, unedited. The rating above includes every review.'),
    list:top.map((r,i)=>reviewCard({...r,url:r.url||d.maps_url||links.maps},i)).join(''),n:top.length}}
  const f=d.featured;
  if(f&&f.reviews&&f.reviews.length){
   return {summary:reviewsSummary(f.rating,f.count,links,null,'Selected reviews from our Google profile, shown word for word. The rating above includes every review.'),
-   list:f.reviews.slice(0,4).map((r,i)=>reviewCard({...r,url:links.maps},i)).join(''),n:Math.min(4,f.reviews.length)}}
+   list:f.reviews.slice(0,6).map((r,i)=>reviewCard({...r,url:links.maps},i)).join(''),n:Math.min(6,f.reviews.length)}}
  return {summary:`<span class="eyebrow">GOOGLE REVIEWS</span><h2>Worn on shift.<br><em>Rated on Google.</em></h2><p>Read what healthcare professionals say about DocNova scrubs and medical essentials on Google.</p><div class="gr-actions"><a class="btn" href="${esc(links.maps)}" target="_blank" rel="noopener">Read our Google reviews ↗</a><a class="text-link" href="${esc(links.write)}" target="_blank" rel="noopener">Write a review</a></div>`,list:'',n:0}}
 function loadGoogleReviews(){const boxes=document.querySelectorAll('.g-reviews');if(!boxes.length)return;
  reviewsRequest=reviewsRequest||fetch('/api/reviews').then(r=>r.ok?r.json():Promise.reject()).catch(()=>({live:false,links:{maps:'https://www.google.com/maps/place/?q=place_id:ChIJsYc-YLZng2URQNsyBvUhTec',write:'https://search.google.com/local/writereview?placeid=ChIJsYc-YLZng2URQNsyBvUhTec'}}));

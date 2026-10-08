@@ -689,7 +689,7 @@ def featured_reviews():
     """Real Google reviews copied into data/featured-reviews.json, shown until the live connection is set up."""
     try:
         data = json.loads((ROOT / 'data' / 'featured-reviews.json').read_text(encoding='utf-8'))
-        reviews = [r for r in data.get('reviews', []) if r.get('author') and r.get('text')][:4]
+        reviews = [r for r in data.get('reviews', []) if r.get('author') and r.get('text')][:6]
         return {'rating': data.get('rating'), 'count': data.get('count'), 'reviews': reviews} if reviews else None
     except (OSError, ValueError):
         return None
