@@ -32,13 +32,15 @@ DELIVERY = {
 COUPONS = {'FIRSTSHIFT10': {'stripe_id': 'docnova-firstshift10', 'percent_off': 10, 'name': 'FIRSTSHIFT10 · 10% off products'}}  # WELCOME10 retired 29 Sep 2026
 
 def load_private_codes():
-    raw = os.getenv('DOCNOVA_PRIVATE_CODES', '') + ',' + os.getenv('DOCNOVA_OWNER_CODES', '')  # owner's personal codes kept separate
-    for part in raw.split(','):
-        m = re.fullmatch(r'\s*([A-Za-z0-9]{3,20})\s*:\s*(\d{1,2})\s*', part)
-        if m and 0 < int(m.group(2)) < 100:
-            code = m.group(1).upper()
-            COUPONS[code] = {'stripe_id': 'docnova-' + code.lower(), 'percent_off': int(m.group(2)),
-                             'name': '%s · %s%% off products' % (code, m.group(2))}
+    # The owner's personal codes (DOCNOVA_OWNER_CODES) are for colleagues collecting in person, so they work for
+    # Click & Collect orders only (owner's decision, 8 Oct 2026). Dashboard sales may still use them.
+    for env, collect_only in (('DOCNOVA_PRIVATE_CODES', False), ('DOCNOVA_OWNER_CODES', True)):
+        for part in os.getenv(env, '').split(','):
+            m = re.fullmatch(r'\s*([A-Za-z0-9]{3,20})\s*:\s*(\d{1,2})\s*', part)
+            if m and 0 < int(m.group(2)) < 100:
+                code = m.group(1).upper()
+                COUPONS[code] = {'stripe_id': 'docnova-' + code.lower(), 'percent_off': int(m.group(2)),
+                                 'name': '%s · %s%% off products' % (code, m.group(2)), 'collect_only': collect_only}
 # Offers limited to one colour and a closing date. PINK15 is the Breast Cancer Awareness Month offer:
 # 15% off pink scrubs only, open to everyone, until the end of 31 October 2026 (UK time, which is GMT that night).
 SCOPED = {'PINK15': {'percent_off': 15, 'color': 'Pink', 'ends': calendar.timegm((2026, 11, 1, 0, 0, 0)),
@@ -153,7 +155,7 @@ def coupon_info(code):
                 if scoped_active(code) else None)
     spec = COUPONS.get(code)
     if spec:
-        return {'code': code, 'percent_off': spec['percent_off']}
+        return {'code': code, 'percent_off': spec['percent_off'], **({'collect_only': True} if spec.get('collect_only') else {})}
     import partners                          # single-use partner codes (e.g. Student Beans)
     i = partners.info(code)
     return {'code': i['code'], 'percent_off': i['percent_off']} if i else None
@@ -198,6 +200,8 @@ def price_cart(raw_items, coupon='', delivery='uk'):
         if not discount:                    # nothing of that colour in the bag: no discount, and no code on the order
             code = ''
     elif code in COUPONS:
+        if COUPONS[code].get('collect_only') and delivery != 'collect':
+            raise ValueError('The code %s is for Click & Collect orders only. Please choose Click & Collect, or remove the code.' % code)
         discount = (subtotal * COUPONS[code]['percent_off'] + 50) // 100  # round half up, like the site
     else:
         import partners                     # single-use partner code (e.g. Student Beans): checked again here

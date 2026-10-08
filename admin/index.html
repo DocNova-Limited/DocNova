@@ -485,9 +485,9 @@ function newInvoice() {
   const due = inp({type: 'number', min: 0, max: 90, value: 7});
   const discount = inp({type: 'number', min: 0, step: '0.01', value: 0}), delivery = inp({type: 'number', min: 0, step: '0.01', value: 0});
   const note = inp({type: 'text', maxlength: 500, placeholder: 'optional note printed on the invoice'});
-  // discount code (e.g. VVIP25, FRONTLINE15): the invoice shows "Discount — 25% off", never the code itself
+  // discount code: the invoice shows "Discount — 25% off", never the code itself
   let codePct = 0, codeName = '';
-  const codeIn = inp({type: 'text', maxlength: 30, placeholder: 'e.g. VVIP25', style: 'text-transform:uppercase', autocomplete: 'off'});
+  const codeIn = inp({type: 'text', maxlength: 30, placeholder: 'discount code', style: 'text-transform:uppercase', autocomplete: 'off'});
   const codeMsg = el('div', {class: 'muted', style: 'margin-top:6px'});
   const codeBtn = el('button', {type: 'button', class: 'ghost', onclick: async () => {
     if (codePct) { codePct = 0; codeName = ''; codeIn.value = ''; codeIn.disabled = false; codeBtn.textContent = 'Apply'; codeMsg.textContent = ''; discount.disabled = false; calc(); return; }
