@@ -240,7 +240,7 @@ def start_card_payment(token, base):
     if not inv or inv['status'] != 'unpaid':
         return None
     lines = json.loads(inv['lines_json'])
-    desc = ', '.join('%d × %s%s' % (l['qty'], l['name'], '' if l['size'] == 'Standard' else ' (' + l['size'] + ')') for l in lines)[:450]
+    desc = ', '.join('%d × %s%s' % (l['qty'], shop.line_name(l), '' if l['size'] == 'Standard' else ' (' + l['size'] + ')') for l in lines)[:450]
     session = shop.stripe_request('POST', '/v1/checkout/sessions', {
         'mode': 'payment',
         'line_items': [{'quantity': 1, 'price_data': {'currency': 'gbp', 'unit_amount': inv['total'],
@@ -291,7 +291,7 @@ def page(inv, base, just_paid=False):
     lines = json.loads(inv['lines_json'])
     day = lambda t: time.strftime('%d %B %Y', time.localtime(t)) if t else ''
     rows = ''.join('<tr><td>%s%s</td><td class="n">%d</td><td class="n">%s</td><td class="n">%s</td></tr>' % (
-        _esc(l['name']), '' if l['size'] == 'Standard' else ' <span class="m">· Size %s</span>' % _esc(l['size']), l['qty'],
+        _esc(shop.line_name(l)), '' if l['size'] == 'Standard' else ' <span class="m">· Size %s</span>' % _esc(l['size']), l['qty'],
         shop.money(l['unit_pence']), shop.money(l['unit_pence'] * l['qty'])) for l in lines)
     status = inv['status']
     stamp = {'paid': '<div class="stamp paid">PAID%s</div>' % (' · ' + day(inv['paid_at']) if inv['paid_at'] else ''),
@@ -319,7 +319,7 @@ def page(inv, base, just_paid=False):
         import returns
         refunds = returns.for_order(inv['order_number'])
     for r in refunds:
-        what = ', '.join('%d × %s' % (l['qty'], l['name']) for l in json.loads(r['lines_json'])) or 'Refund'
+        what = ', '.join('%d × %s' % (l['qty'], shop.line_name(l)) for l in json.loads(r['lines_json'])) or 'Refund'
         totals += '<tr><td colspan="3" class="m">Returned %s: %s</td><td class="n">−%s</td></tr>' % (day(r['created_at']), _esc(what), shop.money(r['amount']))
     if refunds:
         net = inv['total'] - sum(r['amount'] for r in refunds)
@@ -486,7 +486,7 @@ def send_receipt(number, to=None):
     except Exception:
         pass
     rows = ''.join('<tr><td style="padding:7px 0;border-bottom:1px solid #eee9e0">%d × %s%s</td><td align="right" style="padding:7px 0;border-bottom:1px solid #eee9e0">%s</td></tr>'
-                   % (l['qty'], _esc(l['name']), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % _esc(l['size']),
+                   % (l['qty'], _esc(shop.line_name(l)), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % _esc(l['size']),
                       shop.money(l['unit_pence'] * l['qty'])) for l in json.loads(inv['lines_json']))
     items = ('<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130;margin:0 0 18px">%s'
              '%s<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td align="right" style="padding:8px 0;font-weight:700">%s</td></tr></table>'

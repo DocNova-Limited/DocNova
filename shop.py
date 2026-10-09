@@ -135,7 +135,7 @@ def catalogue():
         for category, label, price in (('Tops', 'Top', 4499), ('Pants', 'Trousers', 4999), ('Sets', 'Set', 9498)):
             if not any(p['fit'] == look['fit'] and p['color'] == look['color'] and p['category'] == category for p in products):
                 pid = f"{look['fit'].lower()}-{look['color'].lower().replace(' ', '-')}-{ {'Tops': 'top', 'Sets': 'set'}.get(category, 'trousers')}"
-                products.append({**look, 'id': pid, 'name': f"DocNova Premium Scrub {label} – {look['color']}",
+                products.append({**look, 'id': pid, 'name': f"DocNova Premium Scrub {look['fit']}’s {label} – {look['color']}",
                                  'category': category, 'pence': price})
     products += parse(pushed)
     items = {p['id']: p for p in products if p['id'] and p['pence'] > 0}
@@ -143,6 +143,16 @@ def catalogue():
         raise RuntimeError('Could not read the product catalogue from dist/app.js')
     _catalogue_cache.update(mtime=mtime, items=items)
     return items
+
+def line_name(line):
+    """The current shop name for an order or invoice line, so older orders also say Men's or Women's."""
+    try:
+        p = catalogue().get(line.get('id'))
+    except Exception:
+        p = None
+    if p and p.get('name'):
+        return p['name']
+    return line.get('name') or line.get('id') or ''
 
 def coupon_info(code):
     code = str(code or '').strip().upper()
@@ -301,7 +311,7 @@ def public_order(order):
                                         'Ireland' if a.get('country') == 'IE' else None) if x)
     return {'order_number': order['order_number'], 'status': order['status'], 'status_label': STATUS_LABELS.get(order['status'], order['status']),
             'created_at': order['created_at'], 'paid_at': order['paid_at'], 'dispatched_at': order['dispatched_at'], 'delivered_at': order['delivered_at'],
-            'items': [{k: l[k] for k in ('name', 'size', 'qty', 'unit_pence')} for l in json.loads(order['items_json'])],
+            'items': [{**{k: l[k] for k in ('size', 'qty', 'unit_pence')}, 'name': line_name(l)} for l in json.loads(order['items_json'])],
             'subtotal': order['subtotal'], 'discount': order['discount'], 'shipping': order['shipping'], 'total': order['total'],
             'coupon': order['coupon'], 'carrier': order['carrier'], 'tracking_number': order['tracking_number'],
             'tracking_url': order['tracking_url'], 'ship_to': address, 'name': order['customer_name'],
@@ -506,6 +516,12 @@ def sync_from_session(session, event_type=None):
             log_email_error('partner code for ' + order['order_number'], e)
     if order['status'] == 'paid' and not order['confirmation_sent']:
         send_order_email(order, 'confirmation')
+    if order['status'] == 'paid' and not order.get('owner_notified'):
+        try:
+            import fulfil
+            fulfil.notify_owner(get_order(number))      # the owner hears about every paid website order straight away
+        except Exception as e:
+            log_email_error('owner new-order email for ' + order['order_number'], e)
     return order
 
 _email_retry = {}
@@ -627,7 +643,7 @@ def send_order_email(order, kind):
         return False
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
     track = base + '/#/track-order?order=' + quote(order['order_number'])
-    items = '\n'.join('  %d × %s%s  %s' % (l['qty'], l['name'], '' if l['size'] == 'Standard' else ' (' + l['size'] + ')',
+    items = '\n'.join('  %d × %s%s  %s' % (l['qty'], line_name(l), '' if l['size'] == 'Standard' else ' (' + l['size'] + ')',
                                            money(l['unit_pence'] * l['qty'])) for l in json.loads(order['items_json']))
     if kind == 'confirmation':
         subject = 'Your DocNova order ' + order['order_number'] + ' is confirmed'
@@ -648,7 +664,7 @@ def send_order_email(order, kind):
                 card = base + '/#/rounds'
             text += '\n' + line + '\nSee your card: ' + card + '\n'
         rows = ''.join('<tr><td style="padding:8px 0;border-bottom:1px solid #eee9e0">%d × %s%s</td><td align="right" style="padding:8px 0;border-bottom:1px solid #eee9e0">%s</td></tr>'
-                       % (l['qty'], escape(l['name']), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % escape(l['size']),
+                       % (l['qty'], escape(line_name(l)), '' if l['size'] == 'Standard' else ' <span style="color:#6b7280">· Size %s</span>' % escape(l['size']),
                           money(l['unit_pence'] * l['qty'])) for l in json.loads(order['items_json']))
         lead = ('<p style="margin:0 0 14px">Thank you for your order. Your order number is <strong style="color:#182130">%s</strong>.</p>'
                 '<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130">%s'

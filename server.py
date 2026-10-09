@@ -10,6 +10,8 @@ admin.init_db()
 invoices.init_db()
 returns.init_db()
 reviews.init_db()
+import fulfil
+fulfil.init_db()
 RATE = {}
 ORDER_RE = re.compile(r'DN-\d{6}-[A-Z0-9]{5}')
 
@@ -263,12 +265,25 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == '/admin/api/invoices':
             return self.admin_reply(200, {'invoices': invoices.listing(), 'catalogue': invoices.catalogue_for_admin(),
                                           'sizes': list(shop.SIZES), 'bank_details_set': bool(invoices.bank_details()),
-                                          'card_payments': shop.stripe_ready()})
+                                          'card_payments': shop.stripe_ready(), 'web_orders': fulfil.board()['orders']})
         if url.path == '/admin/api/stock':
             return self.admin_reply(200, {'rows': inventory.summary(), 'sizes': list(inventory.SIZES), 'levels': list(inventory.LEVELS),
                                           'history': inventory.movements()})
         if url.path == '/admin/api/reviews':
             return self.admin_reply(200, guard.pending())
+        if url.path == '/admin/api/orders':
+            return self.admin_reply(200, fulfil.board())
+        if url.path == '/admin/order-sheet':
+            try:
+                raw = fulfil.sheet(q.get('number', [''])[0]).encode()
+            except ValueError as e:
+                return self.admin_reply(404, {'message': str(e)})
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.admin_headers()
+            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+            self.end_headers()
+            return self.wfile.write(raw)
         if url.path == '/admin/api/sales':
             return self.admin_reply(200, {'sales': returns.sales()})
         if url.path == '/admin/api/order':
@@ -369,6 +384,8 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError('Unknown action.')
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
+            if path == '/admin/api/order/fulfil':
+                return self.admin_reply(200, fulfil.act(data.get('number'), data.get('action'), data.get('carrier'), data.get('tracking')))
             if path == '/admin/api/subscribe-customer':
                 return self.admin_reply(200, admin.subscribe_customer(data.get('email'), data.get('notify') is not False))
             if path == '/admin/api/stock':
@@ -595,4 +612,5 @@ if __name__ == '__main__':
     if mode in ('test', 'live') and not os.getenv('STRIPE_WEBHOOK_SECRET'):
         print('No webhook secret set — checking Stripe every 30 seconds for new payments instead (fine for testing; set up the webhook before going live).', flush=True)
         poll_pending_orders()
+    fulfil.start_catch_up_loop()             # owner 'new order' emails: retried every 10 minutes if one failed
     ThreadingHTTPServer((host, port), Handler).serve_forever()

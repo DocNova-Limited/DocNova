@@ -42,7 +42,7 @@ def summary(number):
     for l in lines:
         # the price actually paid per item, after any order discount
         paid_each = round(l['unit_pence'] * paid_goods / goods) if goods else l['unit_pence']
-        out.append({**l, 'returned': back.get(_key(l), 0), 'returnable': l['qty'] - back.get(_key(l), 0), 'paid_each': max(paid_each, 0)})
+        out.append({**l, 'name': shop.line_name(l), 'returned': back.get(_key(l), 0), 'returnable': l['qty'] - back.get(_key(l), 0), 'paid_each': max(paid_each, 0)})
     method = 'card' if order.get('payment_intent_id') else ('cash' if 'cash' in (order.get('note') or '') else 'bank')
     return {'order_number': number, 'email': order['email'], 'name': order['customer_name'], 'status': order['status'],
             'total': order['total'] or 0, 'shipping': order['shipping'] or 0, 'refunded': refunded_total(number), 'lines': out,
@@ -134,7 +134,7 @@ def send_confirmation(rid):
     import invoices
     base = os.environ['DOCNOVA_PUBLIC_URL'].rstrip('/')
     lines = json.loads(r['lines_json'])
-    items = ''.join('<li>%d × %s%s</li>' % (l['qty'], invoices._esc(l['name']), '' if l['size'] == 'Standard' else ' (Size %s)' % invoices._esc(l['size'])) for l in lines)
+    items = ''.join('<li>%d × %s%s</li>' % (l['qty'], invoices._esc(shop.line_name(l)), '' if l['size'] == 'Standard' else ' (Size %s)' % invoices._esc(l['size'])) for l in lines)
     how = {'card': 'to the card you paid with (usually 5–10 working days)', 'bank': 'by bank transfer', 'cash': 'in cash', 'none': ''}.get(r['method'], '')
     ref = order['note'].split(' · ')[0] if (order.get('note') or '').startswith('Invoice ') else 'order ' + order['order_number']
     bal = loyalty.balance(loyalty.norm(order['email']))
@@ -144,7 +144,7 @@ def send_confirmation(rid):
         ('<p style="margin:0">Your DocNova Rounds card has been updated (−%s for the returned items). You now have <strong style="color:#182130">%s of 10 rounds</strong>.</p>'
          % (loyalty.fmt(r['halves']), loyalty.fmt(max(bal, 0))) + '<div style="margin-top:16px">' + loyalty.card_img(bal) + '</div>') if r['halves'] else ''))
     text = 'We have processed your return for %s.\n\n%s\n%s\n%s\nReference: %s\n\nDocNova Ltd · Cambridge, UK\n' % (
-        ref, '\n'.join('  %d × %s' % (l['qty'], l['name']) for l in lines),
+        ref, '\n'.join('  %d × %s' % (l['qty'], shop.line_name(l)) for l in lines),
         ('Refund: %s %s.' % (shop.money(r['amount']), how)) if r['amount'] else '',
         ('Your DocNova Rounds card has been updated: you now have %s of 10 rounds.' % loyalty.fmt(max(bal, 0))) if r['halves'] else '', rid)
     try:

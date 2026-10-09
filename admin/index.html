@@ -74,7 +74,7 @@ tbody tr:hover{background:#f7f5f0}
 .check{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:14px;color:var(--navy)}
 .check input{width:auto;margin-top:3px}
 .help{background:#fff8e8;border:1px solid #f0dfb5;border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:14px}
-.tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);overflow-x:auto}.tabs button{white-space:nowrap;flex:none}
 .tabs button{background:transparent;color:var(--muted);border-radius:0;border-bottom:3px solid transparent;padding:12px 14px}
 .tabs button.on{color:var(--navy);border-bottom-color:var(--gold)}
 .line{display:grid;grid-template-columns:1fr 90px 70px 100px 34px;gap:8px;align-items:end;margin-bottom:8px}
@@ -96,6 +96,16 @@ tbody tr:hover{background:#f7f5f0}
 button.big{padding:15px 22px;font-size:15px}
 @media(max-width:600px){.paycards{grid-template-columns:1fr}.line{grid-template-columns:1fr 70px 56px;}.line .pr,.line .rm{grid-column:span 1}}
 @media(max-width:600px){.grid3{grid-template-columns:1fr 1fr}.stat strong{font-size:22px}}
+.ocard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.ocard.late{border-color:#e9a39b;box-shadow:inset 4px 0 0 var(--bad)}.ocard.today{box-shadow:inset 4px 0 0 var(--gold)}
+.ohead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.ohead h4{margin:0;font-size:17px}.ohead .due{font-weight:600;font-size:14px}.due.late{color:var(--bad)}.due.today{color:#8a6100}
+.ogrid{display:grid;grid-template-columns:1.1fr 1fr 1.4fr;gap:16px;margin-top:12px}.ogrid h5{margin:0 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}
+.oitems{margin:0;padding:0;list-style:none}.oitems li{padding:4px 0;border-bottom:1px dashed #eee9e0}.oitems li:last-child{border:0}.oitems b.sz{color:#8a6100}
+.oacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid #eee9e0}.oacts input{max-width:220px;padding:8px 10px}.oacts button,.oacts a{padding:9px 13px;font-size:13px}
+h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);display:flex;gap:8px;align-items:center}
+.stat.hot{border-color:var(--gold);background:#fffaf0}
+@media(max-width:760px){.ogrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -109,7 +119,13 @@ button.big{padding:15px 22px;font-size:15px}
 </div>
 
 <main id="app" hidden>
-  <div class="tabs"><button type="button" class="on" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="compliance">Device certificates</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div class="tabs"><button type="button" class="on" data-tab="orders">Orders <span id="ordCount" class="pill gold" hidden></span></button><button type="button" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="compliance">Device certificates</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
+  <div id="tab-orders">
+    <div class="stats" id="ordStats"></div>
+    <div class="help"><strong>Website orders.</strong> Every paid order appears here straight away and is emailed to you. Work from the top: <em>Click &amp; Collect to prepare</em> (contact the customer the same day) and <em>To post</em> (post within 1–2 working days). Press <em>Print invoice / packing slip</em> to put one in the parcel, then <em>Mark as posted</em> — the customer is emailed their tracking number.</div>
+    <div class="tools chips" id="ordFilter"></div>
+    <div id="ordList"></div>
+  </div>
   <div id="tab-stock" hidden>
     <div class="help"><strong>Stock is kept as individual pieces and updates itself.</strong> Every paid sale (website or invoice) takes the pieces off; returned items go back on. (If a set is sold, its top and its trousers are each taken off.) You get an email at info@docnova.co.uk when an item drops to <strong>50%</strong>, <strong>25%</strong> and <strong>10%</strong>, and when it sells out. For a new delivery or a stock count, press <em>Update stock</em>.</div>
     <div class="stats" id="stockStats"></div>
@@ -158,10 +174,10 @@ button.big{padding:15px 22px;font-size:15px}
   <div id="tab-invoices" hidden>
     <div class="help" id="invHelp"></div>
     <div class="tools"><button class="gold" id="newInv" type="button">+ Record a sale / invoice</button>
-      <select id="invFilter"><option value="all">All invoices</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></div>
-    <div class="tablewrap"><table><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invRows"></tbody></table></div>
+      <select id="invFilter" style="max-width:340px"><option value="all">Everything — website orders &amp; invoices</option><option value="web">Website orders only</option><option value="inv">Dashboard invoices only</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></div>
+    <div class="tablewrap"><table><thead><tr><th>Invoice / order</th><th>Date</th><th>Customer</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invRows"></tbody></table></div>
   </div>
-  <div id="tab-people">
+  <div id="tab-people" hidden>
   <div class="stats" id="stats"></div>
   <div class="help"><strong>Giving rounds for earlier purchases:</strong> click a person (or <em>Add a customer</em> for someone not listed), enter what they bought before, and press <em>Add rounds</em>. At 10 rounds a free set appears under <em>Approvals</em> — the code is only sent when you approve it.</div>
   <div class="tools">
@@ -217,7 +233,7 @@ $('#loginForm').addEventListener('submit', async e => {
 
 async function load() {
   try { const d = await api('people'); PEOPLE = d.people; } catch (e) { return; }
-  loadApprovals();
+  loadApprovals(); if (!$('#tab-orders').hidden) loadOrders();
   $('#login').hidden = true; $('#app').hidden = false;
   $('#who').replaceChildren(el('button', {class: 'gold', type: 'button', style: 'margin-right:10px', onclick: startSale}, '+ Record a sale'), el('button', {class: 'ghost', type: 'button', onclick: async () => { await fetch('/admin/logout', {method: 'POST', headers: {'X-DocNova-Admin': '1'}}); showLogin(); }}, 'Sign out'));
   const cust = PEOPLE.filter(p => p.orders), subs = PEOPLE.filter(p => p.subscriber && p.subscriber !== 'unsubscribed');
@@ -329,10 +345,78 @@ async function open(email) {
   $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }
 const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
+
+// ---------------------------------------------------------------- website orders (fulfilment)
+let ORD = {orders: [], counts: {}}, ordView = 'todo';
+const OSEC = [['prepare_collect', 'Click & Collect — to prepare', 'gold'], ['to_post', 'To post', 'gold'], ['ready_collect', 'Ready — waiting for the customer to collect', 'no'],
+  ['waiting', 'Payment still clearing (do not send yet)', 'no'], ['on_way', 'Posted — on the way', 'ok'], ['done', 'Completed (delivered / collected)', 'ok'], ['closed', 'Refunded / cancelled', 'bad']];
+const OVIEWS = [['todo', 'To do', ['prepare_collect', 'to_post', 'ready_collect', 'waiting']], ['to_post', 'To post', ['to_post']], ['collect', 'Click & Collect', ['prepare_collect', 'ready_collect']],
+  ['on_way', 'Posted', ['on_way']], ['done', 'Completed', ['done']], ['all', 'All orders', OSEC.map(s => s[0])]];
+const when = t => t ? new Date(t * 1000).toLocaleString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
+async function loadOrders() {
+  try { ORD = await api('orders'); } catch (e) { return; }
+  const c = ORD.counts, todo = c.to_post + c.prepare_collect;
+  $('#ordCount').hidden = !todo; $('#ordCount').textContent = todo;
+  const hot = (k, v, on) => { const s = stat(k, v); if (on) s.classList.add('hot'); return s; };
+  $('#ordStats').replaceChildren(stat('Orders placed', c.placed), stat('Placed today', c.today), hot('Click & Collect to prepare', c.prepare_collect, c.prepare_collect),
+    hot('To post', c.to_post, c.to_post), stat('Waiting for collection', c.ready_collect), stat('Posted — on the way', c.on_way), stat('Completed', c.done));
+  renderOrders();
+}
+function renderOrders() {
+  const view = OVIEWS.find(v => v[0] === ordView) || OVIEWS[0];
+  $('#ordFilter').replaceChildren(...OVIEWS.map(v => el('button', {type: 'button', class: v[0] === ordView ? 'chip on' : 'chip', onclick: () => { ordView = v[0]; renderOrders(); }},
+    v[1] + ' (' + ORD.orders.filter(o => v[2].includes(o.stage)).length + ')')));
+  const out = [];
+  for (const [key, title, cls] of OSEC) {
+    if (!view[2].includes(key)) continue;
+    const list = ORD.orders.filter(o => o.stage === key);
+    if (!list.length && ordView === 'all') continue;
+    out.push(el('h3', {class: 'osec'}, title, el('span', {class: 'pill ' + cls}, list.length)));
+    out.push(...(list.length ? list.map(orderCard) : [el('p', {class: 'muted', style: 'margin:0 0 6px'}, 'Nothing here.')]));
+  }
+  $('#ordList').replaceChildren(...out);
+}
+function orderCard(o) {
+  const msg = el('span', {class: 'msg'});
+  const run = async (action, extra = {}, ask) => {
+    if (ask && !confirm(ask)) return;
+    try { const r = await api('order/fulfil', {number: o.number, action, ...extra});
+      if (action === 'dispatch') alert(r.emailed ? 'Marked as posted. ' + (o.name || 'The customer') + ' has been emailed' + (extra.tracking ? ' their tracking number.' : ' that it is on its way.') : 'Marked as posted. (The customer email could not be sent — please let them know.)');
+      await loadOrders(); } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; }
+  };
+  const acts = [el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/admin/order-sheet?number=' + encodeURIComponent(o.number), target: '_blank', rel: 'noopener'}, 'Print invoice / packing slip')];
+  if (o.stage === 'to_post') {
+    const trk = el('input', {type: 'text', placeholder: 'Royal Mail tracking no. (optional)', autocomplete: 'off'});
+    acts.push(trk, el('button', {type: 'button', class: 'gold', onclick: () => run('dispatch', {carrier: 'Royal Mail', tracking: trk.value.trim()},
+      'Mark ' + o.number + ' as posted' + (trk.value.trim() ? ' with tracking ' + trk.value.trim() : ' (no tracking number)') + '?\n\nThe customer is emailed now.')}, 'Mark as posted'));
+  }
+  if (o.stage === 'prepare_collect') acts.push(el('button', {type: 'button', class: 'gold', onclick: () => run('ready', {}, 'Mark ' + o.number + ' as packed and ready to collect?')}, 'Mark ready for collection'));
+  if (o.stage === 'ready_collect') acts.push(el('button', {type: 'button', class: 'gold', onclick: () => run('delivered', {}, 'Has ' + (o.name || 'the customer') + ' collected ' + o.number + '?')}, 'Mark collected'));
+  if (o.stage === 'on_way') acts.push(el('button', {type: 'button', onclick: () => run('delivered', {}, 'Mark ' + o.number + ' as delivered?')}, 'Mark delivered'));
+  if (['on_way', 'ready_collect', 'done'].includes(o.stage)) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => run('undo', {}, 'Move ' + o.number + ' back one step?')}, 'Undo last step'));
+  acts.push(msg);
+  const late = o.late ? 'late' : o.due_today ? 'today' : '';
+  const due = ['to_post', 'prepare_collect'].includes(o.stage) ? (o.late ? 'LATE — ' : o.due_today ? 'TODAY — ' : '') + o.due_text :
+    o.stage === 'on_way' ? 'Posted ' + when(o.dispatched_at) + (o.tracking_number ? ' · ' + o.carrier + ' ' + o.tracking_number : ' · no tracking number') :
+    o.stage === 'ready_collect' ? 'Ready since ' + when(o.dispatched_at) : o.stage === 'done' ? (o.method === 'collect' ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
+  return el('div', {class: 'ocard ' + late},
+    el('div', {class: 'ohead'}, el('div', {}, el('h4', {}, o.number, ' ', el('span', {class: 'pill ' + (o.method === 'collect' ? 'gold' : 'no')}, o.method_label)),
+      el('div', {class: 'muted'}, 'Paid ' + when(o.paid_at) + ' · ' + o.pieces + (o.pieces === 1 ? ' item' : ' items') + ' · ' + gbp(o.total))),
+      el('div', {class: 'due ' + late}, due)),
+    el('div', {class: 'ogrid'},
+      el('div', {}, el('h5', {}, 'Customer'), el('div', {}, el('strong', {}, o.name || '—')), el('div', {}, o.email ? el('a', {href: 'mailto:' + o.email}, o.email) : ''),
+        el('div', {}, o.phone ? el('a', {href: 'tel:' + o.phone}, o.phone) : el('span', {class: 'muted'}, 'no phone'))),
+      el('div', {}, el('h5', {}, o.method === 'collect' ? 'Click & Collect' : 'Send to'),
+        o.method === 'collect' ? el('div', {class: 'muted'}, 'Arrange a time and place in the Cambridge area with the customer.') : o.address.map(x => el('div', {}, x))),
+      el('div', {}, el('h5', {}, 'Items'), el('ul', {class: 'oitems'}, o.items.map(l => el('li', {}, el('strong', {}, l.qty + ' × '), l.name, l.size !== 'Standard' ? [' · ', el('b', {class: 'sz'}, 'Size ' + l.size)] : ''))),
+        el('div', {class: 'muted', style: 'margin-top:6px'}, 'Items ' + gbp(o.subtotal) + (o.discount ? ' · discount ' + (o.coupon ? o.coupon + ' ' : '') + '−' + gbp(o.discount) : '') + ' · delivery ' + gbp(o.shipping) + ' · ', el('strong', {}, 'paid ' + gbp(o.total))))),
+    el('div', {class: 'oacts'}, acts));
+}
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock'; $('#tab-partners').hidden = b.dataset.tab !== 'partners'; $('#tab-compliance').hidden = b.dataset.tab !== 'compliance';
+  $('#tab-orders').hidden = b.dataset.tab !== 'orders'; $('#tab-people').hidden = b.dataset.tab !== 'people'; $('#tab-invoices').hidden = b.dataset.tab !== 'invoices'; $('#tab-sales').hidden = b.dataset.tab !== 'sales'; $('#tab-approvals').hidden = b.dataset.tab !== 'approvals'; $('#tab-stock').hidden = b.dataset.tab !== 'stock'; $('#tab-partners').hidden = b.dataset.tab !== 'partners'; $('#tab-compliance').hidden = b.dataset.tab !== 'compliance';
+  if (b.dataset.tab === 'orders') loadOrders();
   if (b.dataset.tab === 'partners') loadPartners();
   if (b.dataset.tab === 'compliance') loadCompliance();
   if (b.dataset.tab === 'stock') loadStock();
@@ -390,10 +474,21 @@ async function loadInvoices() {
   renderInvoices();
 }
 $('#invFilter').addEventListener('change', renderInvoices);
+function webRow(o) {
+  const done = ['done', 'on_way', 'ready_collect'].includes(o.stage);
+  return el('tr', {}, el('td', {}, el('strong', {}, o.number), el('div', {class: 'muted'}, 'website order')),
+    el('td', {}, day(o.paid_at)), el('td', {}, o.name, el('div', {class: 'muted'}, o.email || 'no email')), el('td', {class: 'num'}, gbp(o.total)),
+    el('td', {}, el('span', {class: 'pill ' + (o.stage === 'closed' ? 'bad' : 'ok')}, o.stage === 'closed' ? o.status_label : 'Paid online'), el('div', {class: 'muted'}, o.stage_label)),
+    el('td', {}, el('div', {class: 'acts'}, el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/admin/order-sheet?number=' + encodeURIComponent(o.number), target: '_blank', rel: 'noopener'}, 'View / print'),
+      o.stage === 'closed' ? '' : el('button', {type: 'button', class: done ? 'ghost' : 'gold', style: done ? 'color:var(--navy)' : '', onclick: () => document.querySelector('.tabs button[data-tab=orders]').click()}, done ? 'Orders page' : 'Fulfil'))));
+}
 function renderInvoices() {
   const f = $('#invFilter').value;
-  const list = INV.invoices.filter(i => f === 'all' || i.status === f);
-  $('#invRows').replaceChildren(...(list.length ? list.map(i => {
+  const web = (f === 'all' || f === 'web' || f === 'paid') ? (INV.web_orders || []).filter(o => o.status !== 'processing').map(o => ({web: true, at: o.paid_at || o.created_at, o})) : [];
+  const inv = f === 'web' ? [] : INV.invoices.filter(i => f === 'all' || f === 'inv' || i.status === f).map(i => ({at: i.issue_date, i}));
+  const list = [...web, ...inv].sort((a, b) => (b.at || 0) - (a.at || 0));
+  $('#invRows').replaceChildren(...(list.length ? list.map(x => x.web ? webRow(x.o) : x.i).map(i => {
+    if (i instanceof Node) return i;
     const st = ST[i.status] || [i.status, 'no'];
     const act = (label, body, cls) => el('button', {type: 'button', class: cls || 'ghost', style: 'color:var(--navy)', onclick: async ev => {
       ev.stopPropagation();
