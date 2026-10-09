@@ -21,6 +21,9 @@ CATCH_UP_HOURS = 72
 def init_db():
     with shop._lock, shop.db() as conn:
         cols = [r[1] for r in conn.execute('PRAGMA table_info(orders)')]
+        for col in ('packed_at INTEGER', 'handover_by TEXT', 'handover_where TEXT', 'admin_note TEXT'):
+            if col.split()[0] not in cols:
+                conn.execute('ALTER TABLE orders ADD COLUMN ' + col)
         if 'owner_notified' not in cols:
             conn.execute('ALTER TABLE orders ADD COLUMN owner_notified INTEGER DEFAULT 0')
             # Orders paid before this feature existed are not emailed again, except the last 72 hours.
@@ -74,7 +77,18 @@ def stage(order):
         return 'waiting'
     return 'closed'
 
-STAGE_LABEL = {'prepare_collect': 'Prepare for Click & Collect', 'to_post': 'To post', 'ready_collect': 'Ready – waiting for collection',
+def steps(o):
+    """The stage-by-stage tracker shown on each order card: [label, done-at (or None)]."""
+    collect = (o.get('delivery_method') or 'uk') == 'collect'
+    s = o['status']
+    later = s in ('dispatched', 'delivered')
+    done = o.get('delivered_at') or o.get('updated_at')          # older orders may lack a step's time
+    sent = (o.get('dispatched_at') or done) if later else None
+    return [['Order placed', o.get('paid_at') or o.get('created_at')], ['Packed', o.get('packed_at') or sent],
+            ['Ready for collection' if collect else 'Posted', sent],
+            ['Collected' if collect else 'Delivered', done if s == 'delivered' else None]]
+
+STAGE_LABEL = {'prepare_collect': 'Click & Collect – to pack', 'to_post': 'To pack & post', 'ready_collect': 'Ready – waiting for collection',
                'on_way': 'Posted – on its way', 'done': 'Completed', 'waiting': 'Payment still clearing', 'closed': 'Refunded / cancelled'}
 
 def describe(o):
@@ -85,11 +99,13 @@ def describe(o):
     return {'number': o['order_number'], 'status': o['status'], 'status_label': shop.STATUS_LABELS.get(o['status'], o['status']),
             'stage': st, 'stage_label': STAGE_LABEL[st], 'method': method,
             'method_label': shop.DELIVERY.get(method, shop.DELIVERY['uk'])['label'],
-            'paid_at': o['paid_at'], 'created_at': o['created_at'], 'dispatched_at': o['dispatched_at'], 'delivered_at': o['delivered_at'],
+            'paid_at': o['paid_at'], 'created_at': o['created_at'], 'dispatched_at': o['dispatched_at'], 'delivered_at': o['delivered_at'] or (o['updated_at'] if o['status'] == 'delivered' else None),
             'name': o['customer_name'] or '', 'email': o['email'] or '', 'phone': o['phone'] or '', 'address': address_lines(o),
             'items': item_lines(o), 'pieces': sum(l['qty'] for l in json.loads(o['items_json'] or '[]')),
             'subtotal': o['subtotal'] or 0, 'discount': o['discount'] or 0, 'coupon': o['coupon'] or '', 'shipping': o['shipping'] or 0, 'total': o['total'] or 0,
             'carrier': o['carrier'] or '', 'tracking_number': o['tracking_number'] or '', 'tracking_url': o['tracking_url'] or '',
+            'packed_at': o.get('packed_at'), 'handover_by': o.get('handover_by') or '', 'handover_where': o.get('handover_where') or '',
+            'note': o.get('admin_note') or '', 'steps': steps(o),
             'due': due.isoformat() if due else None, 'due_text': due_text,
             'late': bool(due and st in ('to_post', 'prepare_collect') and due < today),
             'due_today': bool(due and st in ('to_post', 'prepare_collect') and due == today)}
@@ -115,32 +131,56 @@ def _website_order(number):
         raise ValueError('Website order not found.')
     return dict(r)
 
-def act(number, action, carrier='', tracking=''):
+def _clean(v, n=120):
+    return ' '.join(str(v or '').split())[:n]
+
+def act(number, action, carrier='', tracking='', by='', where='', note=None):
     """Move a website order along: dispatch (post), ready (Click & Collect), delivered / collected, or undo one step."""
     o = _website_order(str(number or '').strip().upper())
     n, now, collect = o['order_number'], int(time.time()), (o.get('delivery_method') or 'uk') == 'collect'
     emailed = False
-    if action == 'dispatch':
+    packed = {} if o.get('packed_at') else {'packed_at': now}
+    if action == 'pack':
+        if o['status'] != 'paid':
+            raise ValueError('Only a paid order waiting to be sent can be marked packed.')
+        shop.update_order(n, packed_at=o.get('packed_at') or now)
+    elif action == 'note':
+        shop.update_order(n, admin_note=str(note or '').strip()[:1000] or None)
+    elif action == 'tracking':
+        if collect or o['status'] not in ('dispatched', 'delivered'):
+            raise ValueError('Tracking numbers are added to posted orders.')
+        carrier = _clean(carrier or o.get('carrier') or 'Royal Mail', 40)
+        tracking = ''.join(str(tracking or '').split()).upper()[:40]
+        if not tracking:
+            raise ValueError('Please type the tracking number.')
+        shop.update_order(n, carrier=carrier, tracking_number=tracking, tracking_url=shop.tracking_url_for(carrier, tracking), dispatch_sent=0)
+        if o['status'] == 'dispatched':
+            emailed = shop.send_order_email(shop.get_order(n), 'dispatch')     # the customer gets the tracking number
+    elif action == 'dispatch':
         if collect or o['status'] != 'paid':
             raise ValueError('Only a paid order for posting can be marked as posted.')
         carrier = ' '.join(str(carrier or 'Royal Mail').split())[:40] or 'Royal Mail'
         tracking = ''.join(str(tracking or '').split()).upper()[:40]
         shop.update_order(n, status='dispatched', carrier=carrier, tracking_number=tracking or None,
-                          tracking_url=shop.tracking_url_for(carrier, tracking) if tracking else None, dispatched_at=now)
+                          tracking_url=shop.tracking_url_for(carrier, tracking) if tracking else None, dispatched_at=now, **packed)
         emailed = shop.send_order_email(shop.get_order(n), 'dispatch')
     elif action == 'ready':
         if not collect or o['status'] != 'paid':
             raise ValueError('Only a paid Click & Collect order can be marked ready.')
-        shop.update_order(n, status='dispatched', dispatched_at=now)
+        shop.update_order(n, status='dispatched', dispatched_at=now, **packed)
     elif action == 'delivered':
         if o['status'] != 'dispatched':
-            raise ValueError('Mark the order as posted (or ready) first.')
-        shop.update_order(n, status='delivered', delivered_at=now)
+            raise ValueError('Mark the order as posted (or ready for collection) first.')
+        if collect and not _clean(by):
+            raise ValueError('Please write who collected it.')
+        shop.update_order(n, status='delivered', delivered_at=now, handover_by=_clean(by) or None, handover_where=_clean(where, 200) or None)
     elif action == 'undo':
         if o['status'] == 'delivered':
-            shop.update_order(n, status='dispatched', delivered_at=None)
+            shop.update_order(n, status='dispatched', delivered_at=None, handover_by=None, handover_where=None)
         elif o['status'] == 'dispatched':
             shop.update_order(n, status='paid', dispatched_at=None, carrier=None, tracking_number=None, tracking_url=None, dispatch_sent=0)
+        elif o['status'] == 'paid' and o.get('packed_at'):
+            shop.update_order(n, packed_at=None)
         else:
             raise ValueError('Nothing to undo.')
     else:
@@ -267,5 +307,5 @@ def sheet(number):
             '<p class="foot">Thank you for shopping with DocNova. Unworn, unwashed scrubs with tags attached can be returned within 30 days of delivery — contact info@docnova.co.uk.<br>'
             'DocNova Ltd · Registered in England &amp; Wales No. 16502835</p></div></body></html>'
             % (escape(d['number']), escape(d['number']), escape(when), escape(d['name']), escape(d['email']), escape(d['phone'] or ''), to,
-               escape(d['method_label']), escape(d['due_text']) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']),
+               escape(d['method_label']), escape(d['due_text']) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']) + (('<br>Collected by ' + escape(d['handover_by']) + (' · ' + escape(d['handover_where']) if d['handover_where'] else '')) if d['handover_by'] else ''),
                ('<br>' + escape(d['carrier']) + ' ' + escape(d['tracking_number'])) if d['tracking_number'] else '', rows, tot))

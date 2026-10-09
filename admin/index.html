@@ -106,6 +106,16 @@ button.big{padding:15px 22px;font-size:15px}
 h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);display:flex;gap:8px;align-items:center}
 .stat.hot{border-color:var(--gold);background:#fffaf0}
 @media(max-width:760px){.ogrid{grid-template-columns:1fr}}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);margin:14px 0 4px;position:relative}
+.step{text-align:center;position:relative;font-size:13px;color:var(--muted)}
+.step:before{content:"";position:absolute;top:13px;left:-50%;width:100%;height:3px;background:#e4e0d8;z-index:0}.step:first-child:before{display:none}
+.step.done:before,.step.now:before{background:var(--ok)}.step.now:before{background:linear-gradient(90deg,var(--ok),#e4e0d8)}
+.step i{position:relative;z-index:1;display:inline-flex;width:28px;height:28px;border-radius:50%;align-items:center;justify-content:center;font-style:normal;font-weight:700;background:#fff;border:2px solid #d5d0c6;color:#a7a299}
+.step.done i{background:var(--ok);border-color:var(--ok);color:#fff}.step.now i{border-color:var(--gold);color:#8a6100;background:#fffaf0;box-shadow:0 0 0 4px #f6ecd8}
+.step b{display:block;margin-top:5px;color:var(--navy);font-size:13px}.step.todo b{color:var(--muted);font-weight:500}.step small{display:block;font-size:11.5px}
+.handover{background:#eef7f1;border:1px solid #cfe7d8;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:14px}
+.onote{display:flex;gap:8px;align-items:flex-start;margin-top:10px}.onote textarea{min-height:38px;height:38px;padding:8px 10px;font-size:14px;resize:vertical}.onote button{padding:9px 12px;font-size:13px;white-space:nowrap}
+@media(max-width:600px){.onote{flex-wrap:wrap}.oacts input{max-width:none!important}.step b{font-size:11.5px}.step small{font-size:10.5px}}
 </style>
 </head>
 <body>
@@ -122,7 +132,7 @@ h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
   <div class="tabs"><button type="button" class="on" data-tab="orders">Orders <span id="ordCount" class="pill gold" hidden></span></button><button type="button" data-tab="people">People &amp; Rounds</button><button type="button" data-tab="invoices">Invoices</button><button type="button" data-tab="sales">All sales &amp; refunds</button><button type="button" data-tab="stock">Stock</button><button type="button" data-tab="partners">Student discount</button><button type="button" data-tab="compliance">Device certificates</button><button type="button" data-tab="approvals">Approvals <span id="apCount" class="pill gold" hidden></span></button></div>
   <div id="tab-orders">
     <div class="stats" id="ordStats"></div>
-    <div class="help"><strong>Website orders.</strong> Every paid order appears here straight away and is emailed to you. Work from the top: <em>Click &amp; Collect to prepare</em> (contact the customer the same day) and <em>To post</em> (post within 1–2 working days). Press <em>Print invoice / packing slip</em> to put one in the parcel, then <em>Mark as posted</em> — the customer is emailed their tracking number.</div>
+    <div class="help"><strong>Website orders.</strong> Every paid order appears here straight away and is emailed to you. Each order moves step by step. <em>Post:</em> Order placed → Packed → Posted (add the tracking number — the customer is emailed) → Delivered. <em>Click &amp; Collect:</em> Order placed → Packed → Ready for collection → Collected (write who collected it and where). Post within 1–2 working days; contact Click &amp; Collect customers the same day.</div>
     <div class="tools chips" id="ordFilter"></div>
     <div id="ordList"></div>
   </div>
@@ -348,7 +358,7 @@ const li = (k, v) => el('li', {}, el('span', {}, k), el('strong', {}, v));
 
 // ---------------------------------------------------------------- website orders (fulfilment)
 let ORD = {orders: [], counts: {}}, ordView = 'todo';
-const OSEC = [['prepare_collect', 'Click & Collect — to prepare', 'gold'], ['to_post', 'To post', 'gold'], ['ready_collect', 'Ready — waiting for the customer to collect', 'no'],
+const OSEC = [['prepare_collect', 'Click & Collect — to pack and hand over', 'gold'], ['to_post', 'To pack & post', 'gold'], ['ready_collect', 'Ready — waiting for the customer to collect', 'no'],
   ['waiting', 'Payment still clearing (do not send yet)', 'no'], ['on_way', 'Posted — on the way', 'ok'], ['done', 'Completed (delivered / collected)', 'ok'], ['closed', 'Refunded / cancelled', 'bad']];
 const OVIEWS = [['todo', 'To do', ['prepare_collect', 'to_post', 'ready_collect', 'waiting']], ['to_post', 'To post', ['to_post']], ['collect', 'Click & Collect', ['prepare_collect', 'ready_collect']],
   ['on_way', 'Posted', ['on_way']], ['done', 'Completed', ['done']], ['all', 'All orders', OSEC.map(s => s[0])]];
@@ -358,8 +368,8 @@ async function loadOrders() {
   const c = ORD.counts, todo = c.to_post + c.prepare_collect;
   $('#ordCount').hidden = !todo; $('#ordCount').textContent = todo;
   const hot = (k, v, on) => { const s = stat(k, v); if (on) s.classList.add('hot'); return s; };
-  $('#ordStats').replaceChildren(stat('Orders placed', c.placed), stat('Placed today', c.today), hot('Click & Collect to prepare', c.prepare_collect, c.prepare_collect),
-    hot('To post', c.to_post, c.to_post), stat('Waiting for collection', c.ready_collect), stat('Posted — on the way', c.on_way), stat('Completed', c.done));
+  $('#ordStats').replaceChildren(stat('Orders placed', c.placed), stat('Placed today', c.today), hot('Click & Collect to pack', c.prepare_collect, c.prepare_collect),
+    hot('To pack & post', c.to_post, c.to_post), stat('Waiting for collection', c.ready_collect), stat('Posted — on the way', c.on_way), stat('Completed', c.done));
   renderOrders();
 }
 function renderOrders() {
@@ -381,36 +391,61 @@ function orderCard(o) {
   const run = async (action, extra = {}, ask) => {
     if (ask && !confirm(ask)) return;
     try { const r = await api('order/fulfil', {number: o.number, action, ...extra});
-      if (action === 'dispatch') alert(r.emailed ? 'Marked as posted. ' + (o.name || 'The customer') + ' has been emailed' + (extra.tracking ? ' their tracking number.' : ' that it is on its way.') : 'Marked as posted. (The customer email could not be sent — please let them know.)');
+      if (action === 'dispatch' || action === 'tracking') alert(r.emailed ? (action === 'tracking' ? 'Tracking number saved and emailed to ' : 'Marked as posted. Email sent to ') + (o.name || 'the customer') + '.' : 'Saved. (The customer email could not be sent — please let them know.)');
       await loadOrders(); } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; }
   };
+  const collect = o.method === 'collect', packed = !!o.packed_at;
+  const inp = (ph, w) => el('input', {type: 'text', placeholder: ph, autocomplete: 'off', style: w ? 'max-width:' + w : ''});
+  const gold = (label, fn) => el('button', {type: 'button', class: 'gold', onclick: fn}, label);
   const acts = [el('a', {class: 'btn ghost', style: 'color:var(--navy)', href: '/admin/order-sheet?number=' + encodeURIComponent(o.number), target: '_blank', rel: 'noopener'}, 'Print invoice / packing slip')];
-  if (o.stage === 'to_post') {
-    const trk = el('input', {type: 'text', placeholder: 'Royal Mail tracking no. (optional)', autocomplete: 'off'});
-    acts.push(trk, el('button', {type: 'button', class: 'gold', onclick: () => run('dispatch', {carrier: 'Royal Mail', tracking: trk.value.trim()},
-      'Mark ' + o.number + ' as posted' + (trk.value.trim() ? ' with tracking ' + trk.value.trim() : ' (no tracking number)') + '?\n\nThe customer is emailed now.')}, 'Mark as posted'));
+  if ((o.stage === 'to_post' || o.stage === 'prepare_collect') && !packed)
+    acts.push(gold('✓ Mark packed', () => run('pack')));
+  else if (o.stage === 'to_post') {
+    const trk = inp('Royal Mail tracking number');
+    acts.push(trk, gold('✓ Mark as posted', () => run('dispatch', {carrier: 'Royal Mail', tracking: trk.value.trim()},
+      'Mark ' + o.number + ' as posted' + (trk.value.trim() ? ' with tracking ' + trk.value.trim() : ' without a tracking number (you can add it later)') + '?\n\nThe customer is emailed now.')));
+  } else if (o.stage === 'prepare_collect')
+    acts.push(gold('✓ Mark ready for collection', () => run('ready', {}, 'Mark ' + o.number + ' as ready for collection?')));
+  else if (o.stage === 'ready_collect') {
+    const by = inp('Collected by (name) *', '200px'), where = inp('Where / how (e.g. Addenbrooke’s, handed over by Rabeel)', '320px');
+    acts.push(by, where, gold('✓ Mark collected', () => { if (!by.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please write who collected it.'; by.focus(); return; }
+      run('delivered', {by: by.value, where: where.value}, 'Mark ' + o.number + ' as collected by ' + by.value.trim() + '?'); }));
+  } else if (o.stage === 'on_way') {
+    if (!o.tracking_number) { const trk = inp('Add tracking number'); acts.push(trk, el('button', {type: 'button', onclick: () => run('tracking', {tracking: trk.value.trim()})}, 'Save tracking & email customer')); }
+    const note = inp('Delivery note (optional)', '220px');
+    acts.push(note, gold('✓ Mark delivered', () => run('delivered', {where: note.value}, 'Mark ' + o.number + ' as delivered?')));
   }
-  if (o.stage === 'prepare_collect') acts.push(el('button', {type: 'button', class: 'gold', onclick: () => run('ready', {}, 'Mark ' + o.number + ' as packed and ready to collect?')}, 'Mark ready for collection'));
-  if (o.stage === 'ready_collect') acts.push(el('button', {type: 'button', class: 'gold', onclick: () => run('delivered', {}, 'Has ' + (o.name || 'the customer') + ' collected ' + o.number + '?')}, 'Mark collected'));
-  if (o.stage === 'on_way') acts.push(el('button', {type: 'button', onclick: () => run('delivered', {}, 'Mark ' + o.number + ' as delivered?')}, 'Mark delivered'));
-  if (['on_way', 'ready_collect', 'done'].includes(o.stage)) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => run('undo', {}, 'Move ' + o.number + ' back one step?')}, 'Undo last step'));
+  if (packed || ['on_way', 'ready_collect', 'done'].includes(o.stage)) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => run('undo', {}, 'Move ' + o.number + ' back one step?')}, 'Undo last step'));
   acts.push(msg);
+  // stage-by-stage tracker
+  const cur = o.steps.findIndex(s => !s[1]);
+  const tracker = o.stage === 'closed' || o.stage === 'waiting' ? '' : el('div', {class: 'steps'}, o.steps.map((s, k) =>
+    el('div', {class: 'step ' + (s[1] ? 'done' : k === cur ? 'now' : 'todo')}, el('i', {}, s[1] ? '✓' : String(k + 1)), el('b', {}, s[0]),
+      el('small', {}, s[1] ? when(s[1]) : k === cur ? 'next step' : ''))));
   const late = o.late ? 'late' : o.due_today ? 'today' : '';
   const due = ['to_post', 'prepare_collect'].includes(o.stage) ? (o.late ? 'LATE — ' : o.due_today ? 'TODAY — ' : '') + o.due_text :
-    o.stage === 'on_way' ? 'Posted ' + when(o.dispatched_at) + (o.tracking_number ? ' · ' + o.carrier + ' ' + o.tracking_number : ' · no tracking number') :
-    o.stage === 'ready_collect' ? 'Ready since ' + when(o.dispatched_at) : o.stage === 'done' ? (o.method === 'collect' ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
+    o.stage === 'on_way' ? (o.tracking_number ? o.carrier + ' tracking ' + o.tracking_number : 'Posted · no tracking number yet') :
+    o.stage === 'ready_collect' ? 'Waiting for the customer to collect' : o.stage === 'done' ? (collect ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
+  const handover = o.stage === 'done' && (o.handover_by || o.handover_where) ? el('div', {class: 'handover'},
+    collect ? ['✓ Collected by ', el('strong', {}, o.handover_by || '—'), o.handover_where ? ' · ' + o.handover_where : ''] : ['✓ Delivered', o.handover_where ? ' · ' + o.handover_where : '']) : '';
+  const noteBox = el('textarea', {placeholder: 'Notes (only you see these) — e.g. called customer, size swap…', maxlength: 1000});
+  noteBox.value = o.note;
+  const noteMsg = el('span', {class: 'muted'});
+  const notes = el('div', {class: 'onote'}, noteBox, el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => {
+    try { await api('order/fulfil', {number: o.number, action: 'note', note: noteBox.value}); noteMsg.textContent = 'Saved'; o.note = noteBox.value; } catch (e) { noteMsg.textContent = e.message; } }}, 'Save note'), noteMsg);
   return el('div', {class: 'ocard ' + late},
-    el('div', {class: 'ohead'}, el('div', {}, el('h4', {}, o.number, ' ', el('span', {class: 'pill ' + (o.method === 'collect' ? 'gold' : 'no')}, o.method_label)),
+    el('div', {class: 'ohead'}, el('div', {}, el('h4', {}, o.number, ' ', el('span', {class: 'pill ' + (collect ? 'gold' : 'no')}, o.method_label)),
       el('div', {class: 'muted'}, 'Paid ' + when(o.paid_at) + ' · ' + o.pieces + (o.pieces === 1 ? ' item' : ' items') + ' · ' + gbp(o.total))),
       el('div', {class: 'due ' + late}, due)),
+    tracker, handover,
     el('div', {class: 'ogrid'},
       el('div', {}, el('h5', {}, 'Customer'), el('div', {}, el('strong', {}, o.name || '—')), el('div', {}, o.email ? el('a', {href: 'mailto:' + o.email}, o.email) : ''),
         el('div', {}, o.phone ? el('a', {href: 'tel:' + o.phone}, o.phone) : el('span', {class: 'muted'}, 'no phone'))),
-      el('div', {}, el('h5', {}, o.method === 'collect' ? 'Click & Collect' : 'Send to'),
-        o.method === 'collect' ? el('div', {class: 'muted'}, 'Arrange a time and place in the Cambridge area with the customer.') : o.address.map(x => el('div', {}, x))),
+      el('div', {}, el('h5', {}, collect ? 'Click & Collect' : 'Send to'),
+        collect ? el('div', {class: 'muted'}, 'Arrange a time and place in the Cambridge area with the customer.') : o.address.map(x => el('div', {}, x))),
       el('div', {}, el('h5', {}, 'Items'), el('ul', {class: 'oitems'}, o.items.map(l => el('li', {}, el('strong', {}, l.qty + ' × '), l.name, l.size !== 'Standard' ? [' · ', el('b', {class: 'sz'}, 'Size ' + l.size)] : ''))),
         el('div', {class: 'muted', style: 'margin-top:6px'}, 'Items ' + gbp(o.subtotal) + (o.discount ? ' · discount ' + (o.coupon ? o.coupon + ' ' : '') + '−' + gbp(o.discount) : '') + ' · delivery ' + gbp(o.shipping) + ' · ', el('strong', {}, 'paid ' + gbp(o.total))))),
-    el('div', {class: 'oacts'}, acts));
+    el('div', {class: 'oacts'}, acts), notes);
 }
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
