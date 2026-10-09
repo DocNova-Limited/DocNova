@@ -24,6 +24,7 @@ def init_db():
         for col in ('packed_at INTEGER', 'handover_by TEXT', 'handover_where TEXT', 'admin_note TEXT'):
             if col.split()[0] not in cols:
                 conn.execute('ALTER TABLE orders ADD COLUMN ' + col)
+        conn.execute('CREATE TABLE IF NOT EXISTS order_emails (order_number TEXT, kind TEXT, sent_to TEXT, subject TEXT, sent_at INTEGER)')
         if 'owner_notified' not in cols:
             conn.execute('ALTER TABLE orders ADD COLUMN owner_notified INTEGER DEFAULT 0')
             # Orders paid before this feature existed are not emailed again, except the last 72 hours.
@@ -105,7 +106,7 @@ def describe(o):
             'subtotal': o['subtotal'] or 0, 'discount': o['discount'] or 0, 'coupon': o['coupon'] or '', 'shipping': o['shipping'] or 0, 'total': o['total'] or 0,
             'carrier': o['carrier'] or '', 'tracking_number': o['tracking_number'] or '', 'tracking_url': o['tracking_url'] or '',
             'packed_at': o.get('packed_at'), 'handover_by': o.get('handover_by') or '', 'handover_where': o.get('handover_where') or '',
-            'note': o.get('admin_note') or '', 'steps': steps(o),
+            'note': o.get('admin_note') or '', 'steps': steps(o), 'emails': email_history(o),
             'due': due.isoformat() if due else None, 'due_text': due_text,
             'late': bool(due and st in ('to_post', 'prepare_collect') and due < today),
             'due_today': bool(due and st in ('to_post', 'prepare_collect') and due == today)}
@@ -134,58 +135,163 @@ def _website_order(number):
 def _clean(v, n=120):
     return ' '.join(str(v or '').split())[:n]
 
-def act(number, action, carrier='', tracking='', by='', where='', note=None):
-    """Move a website order along: dispatch (post), ready (Click & Collect), delivered / collected, or undo one step."""
-    o = _website_order(str(number or '').strip().upper())
-    n, now, collect = o['order_number'], int(time.time()), (o.get('delivery_method') or 'uk') == 'collect'
-    emailed = False
+EMAILS = {'dispatch': 'On its way', 'ready': 'Ready to collect', 'collected': 'Thank you for collecting', 'delivered': 'Delivered',
+          'confirmation': 'Order confirmed'}
+
+def _plan(o, action, carrier='', tracking='', by='', where=''):
+    """What an action would change on the order, and which customer email (if any) goes with it. Nothing is saved here."""
+    now, collect = int(time.time()), (o.get('delivery_method') or 'uk') == 'collect'
     packed = {} if o.get('packed_at') else {'packed_at': now}
     if action == 'pack':
         if o['status'] != 'paid':
             raise ValueError('Only a paid order waiting to be sent can be marked packed.')
-        shop.update_order(n, packed_at=o.get('packed_at') or now)
-    elif action == 'note':
-        shop.update_order(n, admin_note=str(note or '').strip()[:1000] or None)
-    elif action == 'tracking':
+        return {'packed_at': o.get('packed_at') or now}, None
+    if action == 'tracking':
         if collect or o['status'] not in ('dispatched', 'delivered'):
             raise ValueError('Tracking numbers are added to posted orders.')
         carrier = _clean(carrier or o.get('carrier') or 'Royal Mail', 40)
         tracking = ''.join(str(tracking or '').split()).upper()[:40]
         if not tracking:
             raise ValueError('Please type the tracking number.')
-        shop.update_order(n, carrier=carrier, tracking_number=tracking, tracking_url=shop.tracking_url_for(carrier, tracking), dispatch_sent=0)
-        if o['status'] == 'dispatched':
-            emailed = shop.send_order_email(shop.get_order(n), 'dispatch')     # the customer gets the tracking number
-    elif action == 'dispatch':
+        return {'carrier': carrier, 'tracking_number': tracking, 'tracking_url': shop.tracking_url_for(carrier, tracking)}, \
+            'dispatch' if o['status'] == 'dispatched' else None
+    if action == 'dispatch':
         if collect or o['status'] != 'paid':
             raise ValueError('Only a paid order for posting can be marked as posted.')
-        carrier = ' '.join(str(carrier or 'Royal Mail').split())[:40] or 'Royal Mail'
+        carrier = _clean(carrier or 'Royal Mail', 40) or 'Royal Mail'
         tracking = ''.join(str(tracking or '').split()).upper()[:40]
-        shop.update_order(n, status='dispatched', carrier=carrier, tracking_number=tracking or None,
-                          tracking_url=shop.tracking_url_for(carrier, tracking) if tracking else None, dispatched_at=now, **packed)
-        emailed = shop.send_order_email(shop.get_order(n), 'dispatch')
-    elif action == 'ready':
+        return {'status': 'dispatched', 'carrier': carrier, 'tracking_number': tracking or None,
+                'tracking_url': shop.tracking_url_for(carrier, tracking) if tracking else None, 'dispatched_at': now, **packed}, 'dispatch'
+    if action == 'ready':
         if not collect or o['status'] != 'paid':
             raise ValueError('Only a paid Click & Collect order can be marked ready.')
-        shop.update_order(n, status='dispatched', dispatched_at=now, **packed)
-    elif action == 'delivered':
+        return {'status': 'dispatched', 'dispatched_at': now, **packed}, 'ready'
+    if action == 'delivered':
         if o['status'] != 'dispatched':
             raise ValueError('Mark the order as posted (or ready for collection) first.')
         if collect and not _clean(by):
             raise ValueError('Please write who collected it.')
-        shop.update_order(n, status='delivered', delivered_at=now, handover_by=_clean(by) or None, handover_where=_clean(where, 200) or None)
-    elif action == 'undo':
+        return {'status': 'delivered', 'delivered_at': now, 'handover_by': _clean(by) or None,
+                'handover_where': _clean(where, 200) or None}, 'collected' if collect else 'delivered'
+    if action == 'undo':
         if o['status'] == 'delivered':
-            shop.update_order(n, status='dispatched', delivered_at=None, handover_by=None, handover_where=None)
-        elif o['status'] == 'dispatched':
-            shop.update_order(n, status='paid', dispatched_at=None, carrier=None, tracking_number=None, tracking_url=None, dispatch_sent=0)
-        elif o['status'] == 'paid' and o.get('packed_at'):
-            shop.update_order(n, packed_at=None)
-        else:
-            raise ValueError('Nothing to undo.')
+            return {'status': 'dispatched', 'delivered_at': None, 'handover_by': None, 'handover_where': None}, None
+        if o['status'] == 'dispatched':
+            return {'status': 'paid', 'dispatched_at': None, 'carrier': None, 'tracking_number': None, 'tracking_url': None, 'dispatch_sent': 0}, None
+        if o['status'] == 'paid' and o.get('packed_at'):
+            return {'packed_at': None}, None
+        raise ValueError('Nothing to undo.')
+    raise ValueError('Unknown action.')
+
+def act(number, action, carrier='', tracking='', by='', where='', note=None, email=True, message=''):
+    """Move a website order along one step. email=False saves the step without emailing the customer."""
+    o = _website_order(str(number or '').strip().upper())
+    n = o['order_number']
+    if action == 'note':
+        shop.update_order(n, admin_note=str(note or '').strip()[:1000] or None)
+        return {'order': describe(shop.get_order(n)), 'emailed': False}
+    fields, kind = _plan(o, action, carrier, tracking, by, where)
+    shop.update_order(n, **fields)
+    emailed = False
+    if kind and email:
+        emailed = send_customer_email(shop.get_order(n), kind, message)
+    return {'order': describe(shop.get_order(n)), 'emailed': emailed, 'kind': kind}
+
+def preview(number, action, carrier='', tracking='', by='', where='', message=''):
+    """Exactly what the customer would receive if this step is saved now (nothing is saved or sent)."""
+    o = _website_order(str(number or '').strip().upper())
+    fields, kind = _plan(o, action, carrier, tracking, by, where)
+    if not kind:
+        return {'kind': None}
+    subject, text, html_body = customer_email({**o, **fields}, kind, message)
+    return {'kind': kind, 'label': EMAILS[kind], 'to': o['email'] or '', 'subject': subject, 'html': html_body, 'text': text,
+            'can_send': bool(o['email']) and shop.smtp_configured()}
+
+# ---------------------------------------------------------------- customer emails from the Orders page
+def log_email(number, kind, to, subject):
+    try:
+        with shop._lock, shop.db() as conn:
+            conn.execute('INSERT INTO order_emails (order_number, kind, sent_to, subject, sent_at) VALUES (?,?,?,?,?)',
+                         (number, kind, to, subject, int(time.time())))
+    except Exception:
+        pass
+
+def emails_for(number):
+    with shop.db() as conn:
+        return [{'kind': r['kind'], 'label': EMAILS.get(r['kind'], r['kind']), 'to': r['sent_to'], 'subject': r['subject'], 'at': r['sent_at']}
+                for r in conn.execute('SELECT * FROM order_emails WHERE order_number=? ORDER BY sent_at', (number,))]
+
+def email_history(o):
+    out = emails_for(o['order_number'])
+    if o.get('confirmation_sent') and not any(e['kind'] == 'confirmation' for e in out):   # sent before this list existed
+        out.insert(0, {'kind': 'confirmation', 'label': EMAILS['confirmation'], 'to': o.get('email') or '', 'subject': '', 'at': o.get('paid_at')})
+    if o.get('dispatch_sent') and not any(e['kind'] == 'dispatch' for e in out):
+        out.append({'kind': 'dispatch', 'label': EMAILS['dispatch'], 'to': o.get('email') or '', 'subject': '', 'at': o.get('dispatched_at')})
+    return out
+
+def customer_email(o, kind, message=''):
+    base = (os.getenv('DOCNOVA_PUBLIC_URL') or 'https://docnova.co.uk').rstrip('/')
+    track = base + '/#/track-order?order=' + o['order_number']
+    n = o['order_number']
+    hello = 'Hello %s,' % o['customer_name'] if o.get('customer_name') else 'Hello,'
+    items = item_lines(o)
+    size = lambda l: '' if l['size'] == 'Standard' else ' · Size ' + l['size']
+    item_text = '\n'.join('  %d × %s%s' % (l['qty'], l['name'], size(l)) for l in items)
+    item_html = ''.join('<tr><td style="padding:7px 0;border-bottom:1px solid #eee9e0">%d × %s<span style="color:#6b7280">%s</span></td></tr>'
+                        % (l['qty'], escape(l['name']), escape(size(l))) for l in items)
+    on = lambda ts: uk_time(ts or time.time()).strftime('%A %-d %B')
+    days = {'ie': '5–8 working days'}.get(o.get('delivery_method'), '3–5 working days')
+    if kind == 'dispatch':
+        subject = 'Your DocNova order %s is on its way' % n
+        heading = 'Your order is on its way'
+        lines = ['Good news — your order %s was posted on %s with %s.' % (n, on(o.get('dispatched_at')), o.get('carrier') or 'Royal Mail'),
+                 ('Tracking number: %s' % o['tracking_number']) if o.get('tracking_number') else '',
+                 'It usually arrives within %s.' % days]
+        button, url = ('Track your parcel', o['tracking_url']) if o.get('tracking_url') else ('View your order', track)
+    elif kind == 'ready':
+        subject = 'Your DocNova order %s is ready to collect' % n
+        heading = 'Your order is ready to collect'
+        lines = ['Your order %s is packed and ready for you.' % n,
+                 'We will be in touch to agree a time and place in the Cambridge area — or simply reply to this email to arrange it.']
+        button, url = 'View your order', track
+    elif kind == 'collected':
+        subject = 'Thank you for collecting your DocNova order %s' % n
+        heading = 'Thank you for collecting your order'
+        lines = ['Your order %s was collected on %s%s.' % (n, on(o.get('delivered_at')), (' by ' + o['handover_by']) if o.get('handover_by') else ''),
+                 'We hope you love it. If anything is not quite right, unworn items with their tags can be returned within 30 days — just reply to this email.']
+        button, url = 'View your order', track
     else:
-        raise ValueError('Unknown action.')
-    return {'order': describe(shop.get_order(n)), 'emailed': emailed}
+        subject = 'Your DocNova order %s has been delivered' % n
+        heading = 'Your order has been delivered'
+        lines = ['Our records show your order %s was delivered on %s.' % (n, on(o.get('delivered_at'))),
+                 'If it has not reached you, please reply to this email and we will sort it out straight away.',
+                 'Unworn items with their tags can be returned within 30 days.']
+        button, url = 'View your order', track
+    lines = [x for x in lines if x]
+    message = str(message or '').strip()[:1000]
+    text = '\n\n'.join([hello] + lines + ([message] if message else []) + ['Your order:\n' + item_text, button + ': ' + url, 'Thank you,\nThe DocNova team'])
+    lead = ('<p style="margin:0 0 12px">%s</p>%s%s'
+            '<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="font:15px/1.5 Arial;color:#182130;margin-top:6px">%s</table>'
+            % (escape(hello), ''.join('<p style="margin:0 0 12px">%s</p>' % (escape(x) if not x.startswith('Tracking number:') else
+                                      'Tracking number: <strong style="color:#182130">%s</strong>' % escape(o['tracking_number'])) for x in lines),
+               ('<p style="margin:4px 0 14px;padding:12px 14px;background:#faf8f4;border-left:3px solid #d9b97f;color:#182130">%s</p>'
+                % escape(message).replace('\n', '<br>')) if message else '', item_html))
+    import invoices
+    return subject, text, invoices._email_html(None, base, heading, lead, button, url)
+
+def send_customer_email(o, kind, message=''):
+    if not shop.smtp_configured() or not o.get('email'):
+        return False
+    subject, text, html_body = customer_email(o, kind, message)
+    try:
+        shop.send_mail(o['email'], subject, text, html_body)
+    except Exception as e:
+        shop.log_email_error('%s email for %s' % (kind, o['order_number']), e)
+        return False
+    if kind == 'dispatch':
+        shop.update_order(o['order_number'], dispatch_sent=1)
+    log_email(o['order_number'], kind, o['email'], subject)
+    return True
 
 # ---------------------------------------------------------------- owner email
 def _claim(number):

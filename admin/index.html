@@ -116,6 +116,10 @@ h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
 .handover{background:#eef7f1;border:1px solid #cfe7d8;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:14px}
 .onote{display:flex;gap:8px;align-items:flex-start;margin-top:10px}.onote textarea{min-height:38px;height:38px;padding:8px 10px;font-size:14px;resize:vertical}.onote button{padding:9px 12px;font-size:13px;white-space:nowrap}
 @media(max-width:600px){.onote{flex-wrap:wrap}.oacts input{max-width:none!important}.step b{font-size:11.5px}.step small{font-size:10.5px}}
+.inote{margin-top:12px;background:#f6f4ef;border:1px dashed #cfc8b9;border-radius:10px;padding:10px 12px}
+.inote-h{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5b5446;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}.inote-h span{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)}
+.inote .onote{margin-top:6px}.inote textarea{background:#fff}
+.elog{margin-top:10px;font-size:13px;color:#33604a}.elog strong{color:var(--navy)}
 </style>
 </head>
 <body>
@@ -218,7 +222,7 @@ h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
 const $ = s => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v); }
-  for (const k of kids.flat()) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k)); return e; };
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k)); return e; };
 const gbp = p => '£' + (p / 100).toFixed(2);
 const day = t => t ? new Date(t * 1000).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : '—';
 const SUB = {sent: ['Subscribed', 'ok'], pending: ['Subscribed', 'ok'], sending: ['Subscribed', 'ok'], failed: ['Subscribed', 'ok'], unsubscribed: ['Unsubscribed', 'bad']};
@@ -390,10 +394,9 @@ function orderCard(o) {
   const msg = el('span', {class: 'msg'});
   const run = async (action, extra = {}, ask) => {
     if (ask && !confirm(ask)) return;
-    try { const r = await api('order/fulfil', {number: o.number, action, ...extra});
-      if (action === 'dispatch' || action === 'tracking') alert(r.emailed ? (action === 'tracking' ? 'Tracking number saved and emailed to ' : 'Marked as posted. Email sent to ') + (o.name || 'the customer') + '.' : 'Saved. (The customer email could not be sent — please let them know.)');
-      await loadOrders(); } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; }
+    try { await api('order/fulfil', {number: o.number, action, ...extra}); await loadOrders(); } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; }
   };
+  const mail = (action, extra = {}, title) => emailPreview(o, action, extra, title, e => { msg.className = 'msg bad'; msg.textContent = e; });
   const collect = o.method === 'collect', packed = !!o.packed_at;
   const inp = (ph, w) => el('input', {type: 'text', placeholder: ph, autocomplete: 'off', style: w ? 'max-width:' + w : ''});
   const gold = (label, fn) => el('button', {type: 'button', class: 'gold', onclick: fn}, label);
@@ -402,18 +405,17 @@ function orderCard(o) {
     acts.push(gold('✓ Mark packed', () => run('pack')));
   else if (o.stage === 'to_post') {
     const trk = inp('Royal Mail tracking number');
-    acts.push(trk, gold('✓ Mark as posted', () => run('dispatch', {carrier: 'Royal Mail', tracking: trk.value.trim()},
-      'Mark ' + o.number + ' as posted' + (trk.value.trim() ? ' with tracking ' + trk.value.trim() : ' without a tracking number (you can add it later)') + '?\n\nThe customer is emailed now.')));
+    acts.push(trk, gold('✓ Mark as posted…', () => mail('dispatch', {carrier: 'Royal Mail', tracking: trk.value.trim()}, 'Mark as posted')));
   } else if (o.stage === 'prepare_collect')
-    acts.push(gold('✓ Mark ready for collection', () => run('ready', {}, 'Mark ' + o.number + ' as ready for collection?')));
+    acts.push(gold('✓ Mark ready for collection…', () => mail('ready', {}, 'Mark ready for collection')));
   else if (o.stage === 'ready_collect') {
-    const by = inp('Collected by (name) *', '200px'), where = inp('Where / how (e.g. Addenbrooke’s, handed over by Rabeel)', '320px');
-    acts.push(by, where, gold('✓ Mark collected', () => { if (!by.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please write who collected it.'; by.focus(); return; }
-      run('delivered', {by: by.value, where: where.value}, 'Mark ' + o.number + ' as collected by ' + by.value.trim() + '?'); }));
+    const by = inp('Collected by (name) *', '200px'), where = inp('🔒 Where / how — internal, not emailed', '300px');
+    acts.push(by, where, gold('✓ Mark collected…', () => { if (!by.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please write who collected it.'; by.focus(); return; }
+      mail('delivered', {by: by.value, where: where.value}, 'Mark collected'); }));
   } else if (o.stage === 'on_way') {
-    if (!o.tracking_number) { const trk = inp('Add tracking number'); acts.push(trk, el('button', {type: 'button', onclick: () => run('tracking', {tracking: trk.value.trim()})}, 'Save tracking & email customer')); }
-    const note = inp('Delivery note (optional)', '220px');
-    acts.push(note, gold('✓ Mark delivered', () => run('delivered', {where: note.value}, 'Mark ' + o.number + ' as delivered?')));
+    if (!o.tracking_number) { const trk = inp('Add tracking number'); acts.push(trk, el('button', {type: 'button', onclick: () => { if (!trk.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please type the tracking number.'; return; } mail('tracking', {tracking: trk.value.trim()}, 'Add tracking number'); }}, 'Add tracking…')); }
+    const note = inp('🔒 Delivery note — internal, not emailed', '260px');
+    acts.push(note, gold('✓ Mark delivered…', () => mail('delivered', {where: note.value}, 'Mark delivered')));
   }
   if (packed || ['on_way', 'ready_collect', 'done'].includes(o.stage)) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => run('undo', {}, 'Move ' + o.number + ' back one step?')}, 'Undo last step'));
   acts.push(msg);
@@ -427,12 +429,13 @@ function orderCard(o) {
     o.stage === 'on_way' ? (o.tracking_number ? o.carrier + ' tracking ' + o.tracking_number : 'Posted · no tracking number yet') :
     o.stage === 'ready_collect' ? 'Waiting for the customer to collect' : o.stage === 'done' ? (collect ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
   const handover = o.stage === 'done' && (o.handover_by || o.handover_where) ? el('div', {class: 'handover'},
-    collect ? ['✓ Collected by ', el('strong', {}, o.handover_by || '—'), o.handover_where ? ' · ' + o.handover_where : ''] : ['✓ Delivered', o.handover_where ? ' · ' + o.handover_where : '']) : '';
-  const noteBox = el('textarea', {placeholder: 'Notes (only you see these) — e.g. called customer, size swap…', maxlength: 1000});
+    collect ? ['✓ Collected by ', el('strong', {}, o.handover_by || '—'), o.handover_where ? [' · ', el('span', {title: 'Internal — not emailed'}, '🔒 ' + o.handover_where)] : ''] : ['✓ Delivered', o.handover_where ? ' · 🔒 ' + o.handover_where : '']) : '';
+  const noteBox = el('textarea', {placeholder: 'e.g. who delivered or picked up, where it was dropped, calls with the customer, size swaps…', maxlength: 1000});
   noteBox.value = o.note;
   const noteMsg = el('span', {class: 'muted'});
-  const notes = el('div', {class: 'onote'}, noteBox, el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => {
-    try { await api('order/fulfil', {number: o.number, action: 'note', note: noteBox.value}); noteMsg.textContent = 'Saved'; o.note = noteBox.value; } catch (e) { noteMsg.textContent = e.message; } }}, 'Save note'), noteMsg);
+  const notes = el('div', {class: 'inote'}, el('div', {class: 'inote-h'}, '🔒 Internal notes', el('span', {}, 'DocNova only · never sent to the customer')), el('div', {class: 'onote'}, noteBox, el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => {
+    try { await api('order/fulfil', {number: o.number, action: 'note', note: noteBox.value}); noteMsg.textContent = 'Saved'; o.note = noteBox.value; } catch (e) { noteMsg.textContent = e.message; } }}, 'Save note'), noteMsg));
+  const sent = el('div', {class: 'elog'}, el('strong', {}, '✉ Emails to the customer: '), o.emails.length ? o.emails.map((e, k) => [k ? ' · ' : '', el('span', {title: (e.subject || '') + (e.to ? ' → ' + e.to : '')}, '✓ ' + e.label + ' (' + when(e.at) + ')')]) : el('span', {class: 'muted'}, 'none yet'));
   return el('div', {class: 'ocard ' + late},
     el('div', {class: 'ohead'}, el('div', {}, el('h4', {}, o.number, ' ', el('span', {class: 'pill ' + (collect ? 'gold' : 'no')}, o.method_label)),
       el('div', {class: 'muted'}, 'Paid ' + when(o.paid_at) + ' · ' + o.pieces + (o.pieces === 1 ? ' item' : ' items') + ' · ' + gbp(o.total))),
@@ -445,7 +448,40 @@ function orderCard(o) {
         collect ? el('div', {class: 'muted'}, 'Arrange a time and place in the Cambridge area with the customer.') : o.address.map(x => el('div', {}, x))),
       el('div', {}, el('h5', {}, 'Items'), el('ul', {class: 'oitems'}, o.items.map(l => el('li', {}, el('strong', {}, l.qty + ' × '), l.name, l.size !== 'Standard' ? [' · ', el('b', {class: 'sz'}, 'Size ' + l.size)] : ''))),
         el('div', {class: 'muted', style: 'margin-top:6px'}, 'Items ' + gbp(o.subtotal) + (o.discount ? ' · discount ' + (o.coupon ? o.coupon + ' ' : '') + '−' + gbp(o.discount) : '') + ' · delivery ' + gbp(o.shipping) + ' · ', el('strong', {}, 'paid ' + gbp(o.total))))),
-    el('div', {class: 'oacts'}, acts), notes);
+    el('div', {class: 'oacts'}, acts), sent, notes);
+}
+async function emailPreview(o, action, extra, title, fail) {
+  let p; try { p = await api('order/preview', {number: o.number, action, ...extra}); } catch (e) { return fail(e.message); }
+  const close = () => $('#detail').classList.remove('open');
+  const frame = el('iframe', {sandbox: '', title: 'Email preview', style: 'width:100%;height:560px;border:1px solid var(--line);border-radius:10px;background:#f3f1ec'});
+  frame.srcdoc = p.html;
+  const extraMsg = el('textarea', {placeholder: 'Optional: add a short personal message to this email', maxlength: 1000, style: 'min-height:70px'});
+  const refresh = el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy);padding:8px 12px;font-size:13px;margin-top:8px', onclick: async () => {
+    try { const q = await api('order/preview', {number: o.number, action, ...extra, message: extraMsg.value}); frame.srcdoc = q.html; } catch (e) { alert(e.message); } }}, 'Update preview');
+  const status = el('p', {class: 'msg'});
+  const save = async email => {
+    status.className = 'msg'; status.textContent = 'Saving…';
+    try { const r = await api('order/fulfil', {number: o.number, action, ...extra, email, message: extraMsg.value});
+      close(); await loadOrders();
+      if (email && !r.emailed) alert('Saved, but the email could not be sent — please let ' + (o.name || 'the customer') + ' know yourself.');
+    } catch (e) { status.className = 'msg bad'; status.textContent = e.message; }
+  };
+  const isTracking = action === 'tracking';
+  $('#panel').replaceChildren(
+    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, title + ' · ' + o.number), el('h2', {}, 'Check the email first')),
+      el('button', {class: 'ghost', type: 'button', onclick: close}, 'Cancel')),
+    el('section', {class: 'card'},
+      el('p', {style: 'margin:0 0 4px'}, el('strong', {}, 'To: '), p.to || 'no email address on this order'),
+      el('p', {style: 'margin:0 0 12px'}, el('strong', {}, 'Subject: '), p.subject),
+      frame, el('label', {}, 'Personal message (optional — appears in the email)'), extraMsg, refresh),
+    el('section', {class: 'card'},
+      el('p', {class: 'muted', style: 'margin:0 0 12px'}, 'Nothing is saved or sent until you press a button below. Internal notes and the “where / how” box are never included.'),
+      el('div', {class: 'acts'},
+        p.can_send ? el('button', {type: 'button', class: 'gold big', onclick: () => save(true)}, isTracking ? 'Save tracking & send email' : 'Save step & send email') : '',
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => save(false)}, isTracking ? 'Save tracking only — no email' : 'Save step only — no email'),
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: close}, 'Cancel')),
+      p.can_send ? '' : el('p', {class: 'msg bad'}, 'Email cannot be sent from here for this order' + (p.to ? ' (email sending is not set up).' : ' (no email address).')), status));
+  $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }
 // ---------------------------------------------------------------- tabs + invoices
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {

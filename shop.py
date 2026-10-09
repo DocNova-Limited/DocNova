@@ -687,6 +687,11 @@ def send_order_email(order, kind):
         log_email_error('%s email for %s' % (kind, order['order_number']), e)
         return False
     update_order(order['order_number'], **{flag: 1})
+    try:
+        import fulfil
+        fulfil.log_email(order['order_number'], kind, order['email'], subject)   # shown on the Orders page
+    except Exception:
+        pass
     return True
 
 CARRIER_TRACKING = {'royal mail': 'https://www.royalmail.com/track-your-item#/tracking-results/{n}'}

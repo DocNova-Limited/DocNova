@@ -386,7 +386,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.admin_reply(200, {'number': inv['number'], 'status': inv['status']})
             if path == '/admin/api/order/fulfil':
                 return self.admin_reply(200, fulfil.act(data.get('number'), data.get('action'), data.get('carrier'), data.get('tracking'),
-                                                         data.get('by'), data.get('where'), data.get('note')))
+                                                         data.get('by'), data.get('where'), data.get('note'), data.get('email') is not False, data.get('message')))
+            if path == '/admin/api/order/preview':
+                return self.admin_reply(200, fulfil.preview(data.get('number'), data.get('action'), data.get('carrier'), data.get('tracking'),
+                                                            data.get('by'), data.get('where'), data.get('message')))
             if path == '/admin/api/subscribe-customer':
                 return self.admin_reply(200, admin.subscribe_customer(data.get('email'), data.get('notify') is not False))
             if path == '/admin/api/stock':
