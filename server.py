@@ -281,7 +281,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.admin_headers()
-            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'")
             self.end_headers()
             return self.wfile.write(raw)
         if url.path == '/admin/api/sales':

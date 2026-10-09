@@ -135,7 +135,7 @@ def _offer(p, size, link):
                                                  'transitTime': {'@type': 'QuantitativeValue', 'minValue': uk['days'][0], 'maxValue': uk['days'][1], 'unitCode': 'DAY'}}},
             'hasMerchantReturnPolicy': {'@type': 'MerchantReturnPolicy', 'applicableCountry': 'GB',
                                         'returnPolicyCategory': 'https://schema.org/MerchantReturnFiniteReturnWindow',
-                                        'merchantReturnDays': 30, 'returnMethod': 'https://schema.org/ReturnByMail',
+                                        'merchantReturnDays': 14, 'returnMethod': 'https://schema.org/ReturnByMail',
                                         'returnFees': 'https://schema.org/ReturnFeesCustomerResponsibility'}}
 
 def _variant(p, size, pics):

@@ -258,14 +258,14 @@ def customer_email(o, kind, message=''):
         subject = 'Thank you for collecting your DocNova order %s' % n
         heading = 'Thank you for collecting your order'
         lines = ['Your order %s was collected on %s%s.' % (n, on(o.get('delivered_at')), (' by ' + o['handover_by']) if o.get('handover_by') else ''),
-                 'We hope you love it. If anything is not quite right, unworn items with their tags can be returned within 30 days — just reply to this email.']
+                 'We hope you love it. If anything is not quite right, unworn items with their tags can be returned within 14 days of collection — just reply to this email.']
         button, url = 'View your order', track
     else:
         subject = 'Your DocNova order %s has been delivered' % n
         heading = 'Your order has been delivered'
         lines = ['Our records show your order %s was delivered on %s.' % (n, on(o.get('delivered_at'))),
                  'If it has not reached you, please reply to this email and we will sort it out straight away.',
-                 'Unworn items with their tags can be returned within 30 days.']
+                 'Unworn items with their tags can be returned within 14 days of delivery.']
         button, url = 'View your order', track
     lines = [x for x in lines if x]
     message = str(message or '').strip()[:1000]
@@ -392,26 +392,27 @@ def sheet(number):
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta name="robots" content="noindex"><title>%s · DocNova</title><style>'
             'body{margin:0;background:#f3f1ec;font:14px/1.5 Arial,Helvetica,sans-serif;color:#182130}'
-            '.page{max-width:780px;margin:24px auto;background:#fff;border:1px solid #e4e0d8;padding:36px 40px}'
-            '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #182130;padding-bottom:16px}'
-            '.brand{font:600 26px Georgia,serif;letter-spacing:.04em}.brand small{display:block;font:12px Arial;color:#6b7280;letter-spacing:0}'
-            'h1{margin:0;font:400 22px Georgia,serif;text-align:right}h1 small{display:block;font:13px Arial;color:#6b7280}'
-            '.cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin:20px 0}.cols h3{margin:0 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#004c9b}'
+            '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+            '.page{max-width:780px;margin:24px auto;background:#fff;border:1px solid #e4e0d8}.inner{padding:28px 36px 32px}'
+            '.head{background:#182130;color:#fff;padding:24px 36px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}'
+            '.brand img{width:160px;height:auto;display:block}.brand small{display:block;margin-top:8px;font:12px Arial;color:#c3cbd8;letter-spacing:.04em}'
+            'h1{margin:0;font:600 12px Arial;letter-spacing:.2em;color:#d9b97f;text-align:right}h1 small{display:block;margin-top:6px;font:15px Arial;letter-spacing:0;color:#fff}'
+            '.cols{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:18px;margin:0 0 22px}.cols h3{margin:0 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#004c9b}'
             'table{width:100%%;border-collapse:collapse}th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;text-align:left;border-bottom:1px solid #182130;padding:8px 6px}'
             'td{padding:9px 6px;border-bottom:1px solid #eee9e0}.n{text-align:right;white-space:nowrap}.tick{text-align:center;font-size:18px}th.tick{font-size:11px}'
             'tr.big td{font-weight:700;font-size:16px;border-top:2px solid #182130}.foot{margin-top:26px;font-size:12px;color:#6b7280;text-align:center}'
             '.bar{max-width:780px;margin:16px auto 0;display:flex;gap:10px}.bar button{font:600 14px Arial;background:#182130;color:#fff;border:0;padding:11px 18px;border-radius:8px;cursor:pointer}'
-            '@media print{body{background:#fff}.page{border:0;margin:0;padding:0}.bar{display:none}}'
-            '@media(max-width:640px){.page{padding:22px 16px}.cols{grid-template-columns:1fr}}'
+            '@media print{body{background:#fff}.page{border:0;margin:0}.bar{display:none}}'
+            '@media(max-width:700px){.inner,.head{padding-left:16px;padding-right:16px}.cols{grid-template-columns:1fr 1fr}}'
             '</style></head><body><div class="bar"><button onclick="print()">Print / save as PDF</button></div><div class="page">'
-            '<div class="head"><div class="brand">DOCNOVA<small>DocNova Ltd · Cambridge, United Kingdom · info@docnova.co.uk</small></div>'
-            '<h1>Invoice &amp; packing slip<small>Order %s · %s</small></h1></div>'
-            '<div class="cols"><div><h3>Customer</h3>%s<br>%s<br>%s</div><div><h3>Deliver to</h3>%s</div>'
-            '<div><h3>Delivery</h3>%s<br><span style="color:#6b7280">%s</span><br>Status: %s%s</div></div>'
+            '<div class="head"><div class="brand"><img src="/assets/docnova-logo-white.png" alt="DocNova"><small>DocNova Ltd</small></div>'
+            '<h1>INVOICE &amp; PACKING SLIP<small>Order %s · %s</small></h1></div><div class="inner">'
+            '<div class="cols"><div><h3>From</h3>DocNova Ltd<br>Cambridge, United Kingdom<br>info@docnova.co.uk<br><span style="color:#6b7280;font-size:12px">Company No. 16502835</span></div><div><h3>Customer</h3>%s<br>%s<br>%s</div><div><h3>Deliver to</h3>%s</div>'
+            '<div><h3>Delivery</h3>%s%s<br>Status: %s%s</div></div>'
             '<table><thead><tr><th>Item</th><th>Size</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Total</th><th class="tick">Packed</th></tr></thead>'
             '<tbody>%s%s</tbody></table>'
-            '<p class="foot">Thank you for shopping with DocNova. Unworn, unwashed scrubs with tags attached can be returned within 30 days of delivery — contact info@docnova.co.uk.<br>'
-            'DocNova Ltd · Registered in England &amp; Wales No. 16502835</p></div></body></html>'
+            '<p class="foot">Thank you for shopping with DocNova. Unworn, unwashed scrubs with tags attached can be returned within 14 days of delivery — contact info@docnova.co.uk.<br>'
+            'DocNova Ltd · Registered in England &amp; Wales No. 16502835</p></div></div></body></html>'
             % (escape(d['number']), escape(d['number']), escape(when), escape(d['name']), escape(d['email']), escape(d['phone'] or ''), to,
-               escape(d['method_label']), escape(d['due_text']) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']) + (('<br>Collected by ' + escape(d['handover_by']) + (' · ' + escape(d['handover_where']) if d['handover_where'] else '')) if d['handover_by'] else ''),
+               escape(d['method_label']), ('<br><span style="color:#6b7280">%s</span>' % escape(d['due_text'])) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']) + (('<br>Collected by ' + escape(d['handover_by'])) if d['handover_by'] else ''),
                ('<br>' + escape(d['carrier']) + ' ' + escape(d['tracking_number'])) if d['tracking_number'] else '', rows, tot))

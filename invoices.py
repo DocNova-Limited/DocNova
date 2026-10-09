@@ -327,6 +327,7 @@ def page(inv, base, just_paid=False):
         stamp = '<div class="stamp void">%s</div>' % ('REFUNDED' if net <= 0 else 'PARTLY REFUNDED')
     return '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>DocNova invoice %(num)s</title><style>
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{margin:0;background:#f3f1ec;color:#182130;font:15px/1.55 Arial,Helvetica,sans-serif}
 .doc{max-width:760px;margin:24px auto;background:#fff;border:1px solid #e4e0d8;position:relative}
 .head{background:#182130;color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
@@ -348,7 +349,7 @@ th{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}.n
 .print{max-width:760px;margin:0 auto 30px;text-align:right}.print button{font:600 14px Arial;padding:10px 16px;border:1px solid #182130;background:#fff;cursor:pointer}
 @media print{body{background:#fff}.noprint,.print{display:none}.doc{border:0;margin:0}}
 </style></head><body>%(thanks)s<div class="doc">
-<div class="head"><img src="%(base)s/assets/docnova-logo-white.png" alt="DocNova"><div class="k">INVOICE</div></div>
+<div class="head"><div><img src="%(base)s/assets/docnova-logo-white.png" alt="DocNova"><div style="margin-top:8px;font:12px Arial;color:#c3cbd8;letter-spacing:.04em">DocNova Ltd</div></div><div class="k">INVOICE</div></div>
 <div class="body"><div class="grid">
 <div><h3>From</h3>DocNova Ltd<br>Cambridge, United Kingdom<br>info@docnova.co.uk<br><span class="m">Company No. 16502835 (England &amp; Wales)</span></div>
 <div><h3>Bill to</h3>%(cname)s%(cemail)s%(cphone)s%(caddr)s</div>
