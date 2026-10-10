@@ -472,16 +472,16 @@ async function emailPreview(o, action, extra, title, fail) {
     el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, title + ' · ' + o.number), el('h2', {}, 'Check the email first')),
       el('button', {class: 'ghost', type: 'button', onclick: close}, 'Cancel')),
     el('section', {class: 'card'},
-      el('p', {style: 'margin:0 0 4px'}, el('strong', {}, 'To: '), p.to || 'no email address on this order'),
-      el('p', {style: 'margin:0 0 12px'}, el('strong', {}, 'Subject: '), p.subject),
-      frame, el('label', {}, 'Personal message (optional — appears in the email)'), extraMsg, refresh),
-    el('section', {class: 'card'},
-      el('p', {class: 'muted', style: 'margin:0 0 12px'}, 'Nothing is saved or sent until you press a button below. Internal notes and the “where / how” box are never included.'),
+      el('p', {class: 'muted', style: 'margin:0 0 12px'}, 'Nothing is saved or sent until you press one of these buttons. The email the customer will get is shown below. Internal notes and the “where / how” box are never included.'),
       el('div', {class: 'acts'},
         p.can_send ? el('button', {type: 'button', class: 'gold big', onclick: () => save(true)}, isTracking ? 'Save tracking & send email' : 'Save step & send email') : '',
         el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => save(false)}, isTracking ? 'Save tracking only — no email' : 'Save step only — no email'),
         el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: close}, 'Cancel')),
-      p.can_send ? '' : el('p', {class: 'msg bad'}, 'Email cannot be sent from here for this order' + (p.to ? ' (email sending is not set up).' : ' (no email address).')), status));
+      p.can_send ? '' : el('p', {class: 'msg bad'}, 'Email cannot be sent from here for this order' + (p.to ? ' (email sending is not set up).' : ' (no email address).')), status),
+    el('section', {class: 'card'},
+      el('p', {style: 'margin:0 0 4px'}, el('strong', {}, 'To: '), p.to || 'no email address on this order'),
+      el('p', {style: 'margin:0 0 12px'}, el('strong', {}, 'Subject: '), p.subject),
+      frame, el('label', {}, 'Personal message (optional — appears in the email)'), extraMsg, refresh));
   $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }
 // ---------------------------------------------------------------- tabs + invoices
