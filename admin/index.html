@@ -409,9 +409,10 @@ function orderCard(o) {
   } else if (o.stage === 'prepare_collect')
     acts.push(gold('✓ Mark ready for collection…', () => mail('ready', {}, 'Mark ready for collection')));
   else if (o.stage === 'ready_collect') {
-    const by = inp('Collected by (name) *', '200px'), where = inp('🔒 Where / how — internal, not emailed', '300px');
-    acts.push(by, where, gold('✓ Mark collected…', () => { if (!by.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please write who collected it.'; by.focus(); return; }
-      mail('delivered', {by: by.value, where: where.value}, 'Mark collected'); }));
+    const by = inp('Name — who collected / received it *', '260px'), where = inp('🔒 Where / how — internal, not emailed', '300px');
+    const need = () => { if (by.value.trim()) return true; msg.className = 'msg bad'; msg.textContent = 'Please write the name of the person who collected or received it.'; by.focus(); return false; };
+    acts.push(by, where, gold('✓ Collected by customer…', () => need() && mail('delivered', {by: by.value, where: where.value}, 'Mark collected')),
+      gold('✓ Delivered by us…', () => need() && mail('handed', {by: by.value, where: where.value}, 'Mark delivered by DocNova')));
   } else if (o.stage === 'on_way') {
     if (!o.tracking_number) { const trk = inp('Add tracking number'); acts.push(trk, el('button', {type: 'button', onclick: () => { if (!trk.value.trim()) { msg.className = 'msg bad'; msg.textContent = 'Please type the tracking number.'; return; } mail('tracking', {tracking: trk.value.trim()}, 'Add tracking number'); }}, 'Add tracking…')); }
     const note = inp('🔒 Delivery note — internal, not emailed', '260px');
@@ -427,9 +428,9 @@ function orderCard(o) {
   const late = o.late ? 'late' : o.due_today ? 'today' : '';
   const due = ['to_post', 'prepare_collect'].includes(o.stage) ? (o.late ? 'LATE — ' : o.due_today ? 'TODAY — ' : '') + o.due_text :
     o.stage === 'on_way' ? (o.tracking_number ? o.carrier + ' tracking ' + o.tracking_number : 'Posted · no tracking number yet') :
-    o.stage === 'ready_collect' ? 'Waiting for the customer to collect' : o.stage === 'done' ? (collect ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
+    o.stage === 'ready_collect' ? 'Waiting for the customer to collect' : o.stage === 'done' ? (collect && o.handover_type !== 'handed' ? 'Collected ' : 'Delivered ') + when(o.delivered_at) : o.status_label;
   const handover = o.stage === 'done' && (o.handover_by || o.handover_where) ? el('div', {class: 'handover'},
-    collect ? ['✓ Collected by ', el('strong', {}, o.handover_by || '—'), o.handover_where ? [' · ', el('span', {title: 'Internal — not emailed'}, '🔒 ' + o.handover_where)] : ''] : ['✓ Delivered', o.handover_where ? ' · 🔒 ' + o.handover_where : '']) : '';
+    collect ? [o.handover_type === 'handed' ? '✓ Delivered by us to ' : '✓ Collected by ', el('strong', {}, o.handover_by || '—'), o.handover_where ? [' · ', el('span', {title: 'Internal — not emailed'}, '🔒 ' + o.handover_where)] : ''] : ['✓ Delivered', o.handover_where ? ' · 🔒 ' + o.handover_where : '']) : '';
   const noteBox = el('textarea', {placeholder: 'e.g. who delivered or picked up, where it was dropped, calls with the customer, size swaps…', maxlength: 1000});
   noteBox.value = o.note;
   const noteMsg = el('span', {class: 'muted'});

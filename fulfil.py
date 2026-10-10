@@ -21,7 +21,7 @@ CATCH_UP_HOURS = 72
 def init_db():
     with shop._lock, shop.db() as conn:
         cols = [r[1] for r in conn.execute('PRAGMA table_info(orders)')]
-        for col in ('packed_at INTEGER', 'handover_by TEXT', 'handover_where TEXT', 'admin_note TEXT'):
+        for col in ('packed_at INTEGER', 'handover_by TEXT', 'handover_where TEXT', 'admin_note TEXT', 'handover_type TEXT'):
             if col.split()[0] not in cols:
                 conn.execute('ALTER TABLE orders ADD COLUMN ' + col)
         conn.execute('CREATE TABLE IF NOT EXISTS order_emails (order_number TEXT, kind TEXT, sent_to TEXT, subject TEXT, sent_at INTEGER)')
@@ -87,7 +87,7 @@ def steps(o):
     sent = (o.get('dispatched_at') or done) if later else None
     return [['Order placed', o.get('paid_at') or o.get('created_at')], ['Packed', o.get('packed_at') or sent],
             ['Ready for collection' if collect else 'Posted', sent],
-            ['Collected' if collect else 'Delivered', done if s == 'delivered' else None]]
+            ['Delivered' if (not collect or o.get('handover_type') == 'handed') else ('Collected' if s == 'delivered' else 'Collected / delivered'), done if s == 'delivered' else None]]
 
 STAGE_LABEL = {'prepare_collect': 'Click & Collect – to pack', 'to_post': 'To pack & post', 'ready_collect': 'Ready – waiting for collection',
                'on_way': 'Posted – on its way', 'done': 'Completed', 'waiting': 'Payment still clearing', 'closed': 'Refunded / cancelled'}
@@ -105,7 +105,7 @@ def describe(o):
             'items': item_lines(o), 'pieces': sum(l['qty'] for l in json.loads(o['items_json'] or '[]')),
             'subtotal': o['subtotal'] or 0, 'discount': o['discount'] or 0, 'coupon': o['coupon'] or '', 'shipping': o['shipping'] or 0, 'total': o['total'] or 0,
             'carrier': o['carrier'] or '', 'tracking_number': o['tracking_number'] or '', 'tracking_url': o['tracking_url'] or '',
-            'packed_at': o.get('packed_at'), 'handover_by': o.get('handover_by') or '', 'handover_where': o.get('handover_where') or '',
+            'packed_at': o.get('packed_at'), 'handover_by': o.get('handover_by') or '', 'handover_where': o.get('handover_where') or '', 'handover_type': o.get('handover_type') or '',
             'note': o.get('admin_note') or '', 'steps': steps(o), 'emails': email_history(o),
             'due': due.isoformat() if due else None, 'due_text': due_text,
             'late': bool(due and st in ('to_post', 'prepare_collect') and due < today),
@@ -135,7 +135,7 @@ def _website_order(number):
 def _clean(v, n=120):
     return ' '.join(str(v or '').split())[:n]
 
-EMAILS = {'dispatch': 'On its way', 'ready': 'Ready to collect', 'collected': 'Thank you for collecting', 'delivered': 'Delivered',
+EMAILS = {'dispatch': 'On its way', 'ready': 'Ready to collect', 'collected': 'Thank you for collecting', 'delivered': 'Delivered', 'handed': 'Delivered by DocNova',
           'confirmation': 'Order confirmed'}
 
 def _plan(o, action, carrier='', tracking='', by='', where=''):
@@ -171,11 +171,18 @@ def _plan(o, action, carrier='', tracking='', by='', where=''):
             raise ValueError('Mark the order as posted (or ready for collection) first.')
         if collect and not _clean(by):
             raise ValueError('Please write who collected it.')
-        return {'status': 'delivered', 'delivered_at': now, 'handover_by': _clean(by) or None,
+        return {'status': 'delivered', 'delivered_at': now, 'handover_by': _clean(by) or None, 'handover_type': 'collected' if collect else 'posted',
                 'handover_where': _clean(where, 200) or None}, 'collected' if collect else 'delivered'
+    if action == 'handed':
+        if not collect or o['status'] != 'dispatched':
+            raise ValueError('Only a Click & Collect order that is ready can be marked as delivered by us.')
+        if not _clean(by):
+            raise ValueError('Please write who received it.')
+        return {'status': 'delivered', 'delivered_at': now, 'handover_by': _clean(by), 'handover_type': 'handed',
+                'handover_where': _clean(where, 200) or None}, 'handed'
     if action == 'undo':
         if o['status'] == 'delivered':
-            return {'status': 'dispatched', 'delivered_at': None, 'handover_by': None, 'handover_where': None}, None
+            return {'status': 'dispatched', 'delivered_at': None, 'handover_by': None, 'handover_where': None, 'handover_type': None}, None
         if o['status'] == 'dispatched':
             return {'status': 'paid', 'dispatched_at': None, 'carrier': None, 'tracking_number': None, 'tracking_url': None, 'dispatch_sent': 0}, None
         if o['status'] == 'paid' and o.get('packed_at'):
@@ -256,14 +263,20 @@ def customer_email(o, kind, message=''):
         button, url = 'View your order', track
     elif kind == 'collected':
         subject = 'Thank you for collecting your DocNova order %s' % n
-        heading = 'Thank you for collecting your order'
+        heading = 'Thank you for shopping with DocNova'
         lines = ['Your order %s was collected on %s%s.' % (n, on(o.get('delivered_at')), (' by ' + o['handover_by']) if o.get('handover_by') else ''),
-                 'We hope you love it. If anything is not quite right, unworn items with their tags can be returned within 14 days of collection — just reply to this email.']
+                 'Thank you for buying from us — we hope you love it. If anything is not quite right, unworn items with their tags can be returned within 14 days of collection — just reply to this email.']
+        button, url = 'View your order', track
+    elif kind == 'handed':
+        subject = 'Your DocNova order %s has been delivered' % n
+        heading = 'Thank you for shopping with DocNova'
+        lines = ['Your order %s was delivered by the DocNova team on %s%s.' % (n, on(o.get('delivered_at')), (' and received by ' + o['handover_by']) if o.get('handover_by') else ''),
+                 'Thank you for buying from us — we hope you love it. If anything is not quite right, unworn items with their tags can be returned within 14 days — just reply to this email.']
         button, url = 'View your order', track
     else:
         subject = 'Your DocNova order %s has been delivered' % n
-        heading = 'Your order has been delivered'
-        lines = ['Our records show your order %s was delivered on %s.' % (n, on(o.get('delivered_at'))),
+        heading = 'Thank you for shopping with DocNova'
+        lines = ['Our records show your order %s was delivered on %s. Thank you for buying from us.' % (n, on(o.get('delivered_at'))),
                  'If it has not reached you, please reply to this email and we will sort it out straight away.',
                  'Unworn items with their tags can be returned within 14 days of delivery.']
         button, url = 'View your order', track
@@ -414,5 +427,5 @@ def sheet(number):
             '<p class="foot">Thank you for shopping with DocNova. Unworn, unwashed scrubs with tags attached can be returned within 14 days of delivery — contact info@docnova.co.uk.<br>'
             'DocNova Ltd · Registered in England &amp; Wales No. 16502835</p></div></div></body></html>'
             % (escape(d['number']), escape(d['number']), escape(when), escape(d['name']), escape(d['email']), escape(d['phone'] or ''), to,
-               escape(d['method_label']), ('<br><span style="color:#6b7280">%s</span>' % escape(d['due_text'])) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']) + (('<br>Collected by ' + escape(d['handover_by'])) if d['handover_by'] else ''),
+               escape(d['method_label']), ('<br><span style="color:#6b7280">%s</span>' % escape(d['due_text'])) if d['stage'] in ('to_post', 'prepare_collect') else '', escape(d['stage_label']) + (('<br>' + ('Delivered by us to ' if d['handover_type'] == 'handed' else 'Received by ' if d['handover_type'] == 'posted' else 'Collected by ') + escape(d['handover_by'])) if d['handover_by'] else ''),
                ('<br>' + escape(d['carrier']) + ' ' + escape(d['tracking_number'])) if d['tracking_number'] else '', rows, tot))
