@@ -10,8 +10,9 @@ admin.init_db()
 invoices.init_db()
 returns.init_db()
 reviews.init_db()
-import fulfil
+import fulfil, thanks
 fulfil.init_db()
+thanks.init_db()
 RATE = {}
 ORDER_RE = re.compile(r'DN-\d{6}-[A-Z0-9]{5}')
 
@@ -273,6 +274,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.admin_reply(200, guard.pending())
         if url.path == '/admin/api/orders':
             return self.admin_reply(200, fulfil.board())
+        if url.path == '/admin/api/videos':
+            return self.admin_reply(200, thanks.listing())
         if url.path == '/admin/order-sheet':
             try:
                 raw = fulfil.sheet(q.get('number', [''])[0]).encode()
@@ -387,6 +390,12 @@ class Handler(SimpleHTTPRequestHandler):
             if path == '/admin/api/order/fulfil':
                 return self.admin_reply(200, fulfil.act(data.get('number'), data.get('action'), data.get('carrier'), data.get('tracking'),
                                                          data.get('by'), data.get('where'), data.get('note'), data.get('email') is not False, data.get('message')))
+            if path == '/admin/api/video/request':
+                return self.admin_reply(200, thanks.request(data.get('number'), data.get('note')))
+            if path == '/admin/api/video/preview':
+                return self.admin_reply(200, thanks.preview(data.get('id')))
+            if path == '/admin/api/video/decide':
+                return self.admin_reply(200, thanks.decide(data.get('id'), data.get('approve') is True, data.get('percent'), data.get('email') is not False))
             if path == '/admin/api/order/preview':
                 return self.admin_reply(200, fulfil.preview(data.get('number'), data.get('action'), data.get('carrier'), data.get('tracking'),
                                                             data.get('by'), data.get('where'), data.get('message')))

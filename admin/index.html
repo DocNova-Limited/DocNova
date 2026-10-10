@@ -176,6 +176,9 @@ h3.osec{margin:22px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
   </div>
   <div id="tab-approvals" hidden>
     <div class="help"><strong>Nothing is given away without you.</strong> Free sets wait here until you approve them — the customer only receives their code after you press <em>Approve</em>. Referrals that look suspicious (same name, phone, address or email as the referrer or an existing customer) are held here too, and info@docnova.co.uk gets an email about each one.</div>
+    <h3 style="margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)">🎥 Video thank-you codes</h3>
+    <div id="vdList"></div>
+    <h3 style="margin:26px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)">Rounds rewards &amp; referrals</h3>
     <div id="apList"></div>
     <h3 style="margin:26px 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)">Recently decided</h3>
     <div id="apRecent"></div>
@@ -418,6 +421,10 @@ function orderCard(o) {
     const note = inp('🔒 Delivery note — internal, not emailed', '260px');
     acts.push(note, gold('✓ Mark delivered…', () => mail('delivered', {where: note.value}, 'Mark delivered')));
   }
+  if (['on_way', 'ready_collect', 'done'].includes(o.stage) && !o.video) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => {
+    const note = prompt('Video received from ' + (o.name || 'the customer') + ' for ' + o.number + '?\n\nWhere did it come in? (e.g. email reply, WhatsApp) — only you see this:', '');
+    if (note === null) return;
+    try { await api('video/request', {number: o.number, note}); alert('Added to Approvals. Approve it there to email their thank-you code.'); await loadOrders(); loadApprovals(); } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message; } }}, '🎥 Video received…'));
   if (packed || ['on_way', 'ready_collect', 'done'].includes(o.stage)) acts.push(el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => run('undo', {}, 'Move ' + o.number + ' back one step?')}, 'Undo last step'));
   acts.push(msg);
   // stage-by-stage tracker
@@ -449,7 +456,10 @@ function orderCard(o) {
         collect ? el('div', {class: 'muted'}, 'Arrange a time and place in the Cambridge area with the customer.') : o.address.map(x => el('div', {}, x))),
       el('div', {}, el('h5', {}, 'Items'), el('ul', {class: 'oitems'}, o.items.map(l => el('li', {}, el('strong', {}, l.qty + ' × '), l.name, l.size !== 'Standard' ? [' · ', el('b', {class: 'sz'}, 'Size ' + l.size)] : ''))),
         el('div', {class: 'muted', style: 'margin-top:6px'}, 'Items ' + gbp(o.subtotal) + (o.discount ? ' · discount ' + (o.coupon ? o.coupon + ' ' : '') + '−' + gbp(o.discount) : '') + ' · delivery ' + gbp(o.shipping) + ' · ', el('strong', {}, 'paid ' + gbp(o.total))))),
-    el('div', {class: 'oacts'}, acts), sent, notes);
+    el('div', {class: 'oacts'}, acts), sent,
+    o.video ? el('div', {class: 'elog', style: 'color:#8a6100'}, el('strong', {}, '🎥 Video thank-you: '),
+      o.video.status === 'pending' ? 'waiting for your approval (Approvals tab)' : o.video.status === 'declined' ? 'declined' :
+      o.video.code + ' · ' + o.video.percent + '% off' + (o.video.used ? ' · used' : ' · not used yet')) : '', notes);
 }
 async function emailPreview(o, action, extra, title, fail) {
   let p; try { p = await api('order/preview', {number: o.number, action, ...extra}); } catch (e) { return fail(e.message); }
@@ -798,8 +808,19 @@ async function returnDialog(number) {
 }
 // ---------------------------------------------------------------- approvals (free sets + held referrals)
 async function loadApprovals() {
-  let d; try { d = await api('reviews'); } catch (e) { return; }
-  const n = d.pending.length; $('#apCount').hidden = !n; $('#apCount').textContent = n;
+  let d, v; try { [d, v] = await Promise.all([api('reviews'), api('videos')]); } catch (e) { return; }
+  const n = d.pending.length, total = n + v.pending.length; $('#apCount').hidden = !total; $('#apCount').textContent = total;
+  const vcard = (r, live) => el('div', {class: 'card', style: 'margin-bottom:12px'},
+    el('div', {style: 'display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap'},
+      el('div', {}, el('strong', {}, '🎥 Video thank-you'), ' · ', el('span', {class: 'muted'}, r.order_number + ' · ' + day(r.created_at)),
+        el('div', {style: 'margin-top:6px'}, el('strong', {}, r.name || r.email), ' · ' + r.email),
+        el('div', {class: 'muted'}, 'Code: ' + r.percent + '% off' + (r.base_percent ? ' (their usual ' + r.base_percent + '% + extra 10%)' : ' (extra 10%)') + (r.note ? ' · 🔒 ' + r.note : ''))),
+      live ? el('div', {class: 'acts'}, el('button', {type: 'button', class: 'gold', onclick: () => videoApprove(r)}, 'Approve…'),
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: async () => { if (!confirm('Decline the video thank-you for ' + (r.name || r.email) + '?')) return;
+          try { await api('video/decide', {id: r.id, approve: false}); loadApprovals(); loadOrders(); } catch (e) { alert(e.message); } }}, 'Decline'))
+        : el('span', {class: 'pill ' + (r.status === 'approved' ? 'ok' : 'bad')}, r.status === 'approved' ? r.code + (r.redeemed_order ? ' · used on ' + r.redeemed_order : r.expired ? ' · expired' : ' · not used yet') : 'declined')));
+  $('#vdList').replaceChildren(...(v.pending.length ? v.pending.map(r => vcard(r, true)) : [el('p', {class: 'muted'}, 'No videos waiting. On the Orders page, press “🎥 Video received…” on the customer’s order when their video arrives.')]),
+    ...v.recent.slice(0, 8).map(r => vcard(r, false)));
   const card = (r, live) => el('div', {class: 'card', style: 'margin-bottom:12px'},
     el('div', {style: 'display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap'},
       el('div', {}, el('strong', {}, r.kind === 'reward' ? 'Free scrub set' : 'Referral round'), ' · ', el('span', {class: 'muted'}, r.id + ' · ' + day(r.created_at)),
@@ -814,6 +835,30 @@ async function loadApprovals() {
     r.note ? el('p', {class: 'muted', style: 'margin:8px 0 0'}, 'Note: ' + r.note) : '');
   $('#apList').replaceChildren(...(n ? d.pending.map(r => card(r, true)) : [el('p', {class: 'muted'}, 'Nothing waiting for approval.')]));
   $('#apRecent').replaceChildren(...(d.recent.length ? d.recent.map(r => card(r, false)) : [el('p', {class: 'muted'}, 'None yet.')]));
+}
+async function videoApprove(r) {
+  let p; try { p = await api('video/preview', {id: r.id}); } catch (e) { return alert(e.message); }
+  const close = () => $('#detail').classList.remove('open');
+  const pct = el('input', {type: 'number', min: 5, max: 50, value: r.percent, style: 'max-width:110px'});
+  const frame = el('iframe', {sandbox: '', title: 'Email preview', style: 'width:100%;height:520px;border:1px solid var(--line);border-radius:10px;background:#f3f1ec'});
+  frame.srcdoc = p.html;
+  const status = el('p', {class: 'msg'});
+  const go = async email => { status.className = 'msg'; status.textContent = 'Saving…';
+    try { const x = await api('video/decide', {id: r.id, approve: true, percent: +pct.value, email}); close(); loadApprovals(); loadOrders();
+      alert('Approved — code ' + x.code + ' (' + x.percent + '% off).' + (email ? (x.emailed ? ' Emailed to ' + r.email + '.' : ' The email could not be sent — please send the code yourself.') : ' Not emailed — please send it yourself.')); }
+    catch (e) { status.className = 'msg bad'; status.textContent = e.message; } };
+  $('#panel').replaceChildren(
+    el('div', {class: 'top'}, el('div', {style: 'flex:1'}, el('div', {class: 'muted', style: 'color:#c9cfd9'}, 'Video thank-you · ' + r.order_number), el('h2', {}, 'Approve & send code')),
+      el('button', {class: 'ghost', type: 'button', onclick: close}, 'Cancel')),
+    el('section', {class: 'card'},
+      el('p', {style: 'margin:0 0 6px'}, 'Customer: ', el('strong', {}, r.name || r.email), ' · ' + r.email),
+      el('label', {}, 'Discount on the code (%)' + (r.base_percent ? ' — their usual ' + r.base_percent + '% + extra 10%' : ' — extra 10%')), pct,
+      el('p', {class: 'muted', style: 'margin:10px 0 12px'}, 'A personal code (THANKS-……) is made when you approve. It works once, for 60 days. The real code replaces THANKS-XXXXXX in the email below.'),
+      el('div', {class: 'acts'}, p.can_send ? el('button', {type: 'button', class: 'gold big', onclick: () => go(true)}, 'Approve & send email') : '',
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: () => go(false)}, 'Approve — no email'),
+        el('button', {type: 'button', class: 'ghost', style: 'color:var(--navy)', onclick: close}, 'Cancel')), status),
+    el('section', {class: 'card'}, el('p', {style: 'margin:0 0 4px'}, el('strong', {}, 'To: '), p.to), el('p', {style: 'margin:0 0 12px'}, el('strong', {}, 'Subject: '), p.subject), frame));
+  $('#detail').classList.add('open'); $('#panel').scrollTop = 0;
 }
 async function decideReview(r, approve) {
   const what = r.kind === 'reward' ? 'the free scrub set for ' + r.email + (approve ? ' (their code is emailed now and 10 rounds come off the card)' : '') : 'the referral round for ' + r.referrer;

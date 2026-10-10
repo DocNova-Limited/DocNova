@@ -159,6 +159,9 @@ def coupon_info(code):
     if code.startswith('ROUNDS-'):
         import loyalty
         return loyalty.reward_info(code)
+    if code.startswith('THANKS-'):
+        import thanks                         # personal video thank-you code
+        return thanks.info(code)
     if code in SCOPED:                        # colour-limited offer: the browser is told which colour it covers
         spec = SCOPED[code]
         return ({'code': code, 'percent_off': spec['percent_off'], 'only_color': spec['color'], 'ends_text': spec['ends_text']}
@@ -203,6 +206,12 @@ def price_cart(raw_items, coupon='', delivery='uk'):
         if not loyalty.reward_info(code):
             raise ValueError('That DocNova Rounds code has already been used or has expired.')
         discount = loyalty.reward_discount(lines)
+    elif code.startswith('THANKS-'):
+        import thanks                       # personal video thank-you code (one order, 60 days)
+        t = thanks.info(code)
+        if not t:
+            raise ValueError('That thank-you code has already been used or has expired.')
+        discount = (subtotal * t['percent_off'] + 50) // 100
     elif code in SCOPED:
         if not scoped_active(code):
             raise ValueError('%s ended on %s. Please remove the code to continue.' % (code, SCOPED[code]['ends_text']))
@@ -397,6 +406,9 @@ def ensure_scoped_coupon(code, amount):
 def ensure_coupon(code):
     """Create the Stripe coupon behind a site discount code the first time it is used."""
     spec = COUPONS.get(code)
+    if not spec and code.startswith('THANKS-'):
+        import thanks
+        spec = thanks.stripe_coupon_spec(code)
     if not spec:
         import partners
         spec = partners.stripe_coupon_spec(code)
@@ -512,6 +524,8 @@ def sync_from_session(session, event_type=None):
         try:
             import partners
             partners.redeem(order)                   # a student discount code is used up once its order is paid
+            import thanks
+            thanks.redeem(order)                     # so is a video thank-you code
         except Exception as e:
             log_email_error('partner code for ' + order['order_number'], e)
     if order['status'] == 'paid' and not order['confirmation_sent']:

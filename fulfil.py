@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 import shop
+from urllib.parse import quote
 
 try:
     UK = ZoneInfo('Europe/London')
@@ -106,7 +107,7 @@ def describe(o):
             'subtotal': o['subtotal'] or 0, 'discount': o['discount'] or 0, 'coupon': o['coupon'] or '', 'shipping': o['shipping'] or 0, 'total': o['total'] or 0,
             'carrier': o['carrier'] or '', 'tracking_number': o['tracking_number'] or '', 'tracking_url': o['tracking_url'] or '',
             'packed_at': o.get('packed_at'), 'handover_by': o.get('handover_by') or '', 'handover_where': o.get('handover_where') or '', 'handover_type': o.get('handover_type') or '',
-            'note': o.get('admin_note') or '', 'steps': steps(o), 'emails': email_history(o),
+            'note': o.get('admin_note') or '', 'steps': steps(o), 'emails': email_history(o), 'video': _video(o['order_number']),
             'due': due.isoformat() if due else None, 'due_text': due_text,
             'late': bool(due and st in ('to_post', 'prepare_collect') and due < today),
             'due_today': bool(due and st in ('to_post', 'prepare_collect') and due == today)}
@@ -135,7 +136,7 @@ def _website_order(number):
 def _clean(v, n=120):
     return ' '.join(str(v or '').split())[:n]
 
-EMAILS = {'dispatch': 'On its way', 'ready': 'Ready to collect', 'collected': 'Thank you for collecting', 'delivered': 'Delivered', 'handed': 'Delivered by DocNova',
+EMAILS = {'thanks': 'Video thank-you code', 'dispatch': 'On its way', 'ready': 'Ready to collect', 'collected': 'Thank you for collecting', 'delivered': 'Delivered', 'handed': 'Delivered by DocNova',
           'confirmation': 'Order confirmed'}
 
 def _plan(o, action, carrier='', tracking='', by='', where=''):
@@ -228,6 +229,14 @@ def emails_for(number):
         return [{'kind': r['kind'], 'label': EMAILS.get(r['kind'], r['kind']), 'to': r['sent_to'], 'subject': r['subject'], 'at': r['sent_at']}
                 for r in conn.execute('SELECT * FROM order_emails WHERE order_number=? ORDER BY sent_at', (number,))]
 
+def _video(number):
+    try:
+        import thanks
+        v = thanks.for_order(number)
+        return {'status': v['status'], 'code': v.get('code'), 'percent': v['percent'], 'used': bool(v.get('redeemed_order'))} if v else None
+    except Exception:
+        return None
+
 def email_history(o):
     out = emails_for(o['order_number'])
     if o.get('confirmation_sent') and not any(e['kind'] == 'confirmation' for e in out):   # sent before this list existed
@@ -290,7 +299,27 @@ def customer_email(o, kind, message=''):
                ('<p style="margin:4px 0 14px;padding:12px 14px;background:#faf8f4;border-left:3px solid #d9b97f;color:#182130">%s</p>'
                 % escape(message).replace('\n', '<br>')) if message else '', item_html))
     import invoices
-    return subject, text, invoices._email_html(None, base, heading, lead, button, url)
+    extra = ''
+    if kind in ('collected', 'handed', 'delivered'):        # the final thank-you: honest review ask (no reward) + video thank-you offer
+        review = shop.google_links(os.getenv('GOOGLE_PLACE_ID', shop.DEFAULT_PLACE_ID).strip() or shop.DEFAULT_PLACE_ID)['write']
+        reply_to = os.getenv('DOCNOVA_FROM_EMAIL') or 'info@docnova.co.uk'
+        text += ('\n\nLoved your scrubs? An honest Google review helps other doctors and nurses find us: %s'
+                 '\n\nShow us your shift and get an extra 10%% off: reply to this email with a 10-second video of you in your DocNova scrubs '
+                 '(on shift, in the changing room, anywhere you like). Once we have seen it, we will email you a personal code for an extra 10%% off '
+                 'your next order, on top of your usual discount. By sending it you are happy for us to share it on DocNova social media.\n' % review)
+        box = 'padding:18px 20px;border:1px solid #ece6da;background:#faf8f3'
+        extra = ('<tr><td style="padding:0 30px 14px;font:15px/1.6 Arial;color:#4a5160"><div style="%s">'
+                 '<p style="margin:0 0 6px;font:600 16px Arial;color:#182130">Loved your scrubs? &#11088;</p>'
+                 '<p style="margin:0 0 10px">An honest Google review helps other doctors and nurses find us.</p>'
+                 '<a href="%s" style="display:inline-block;border:1px solid #182130;color:#182130;font:600 14px Arial;text-decoration:none;padding:10px 18px">Leave a Google review</a></div></td></tr>'
+                 '<tr><td style="padding:0 30px 24px;font:15px/1.6 Arial;color:#4a5160"><div style="%s;border-color:#d9b97f;background:#fffaf0">'
+                 '<p style="margin:0 0 6px;font:600 16px Arial;color:#182130">&#127909; Show us your shift — get an extra 10%% off</p>'
+                 '<p style="margin:0 0 10px">Reply to this email with a <strong>10-second video</strong> of you in your DocNova scrubs — on shift, in the changing room, anywhere you like. '
+                 'Once we have seen it, we will email you a personal code for an <strong>extra 10%% off your next order</strong>, on top of your usual discount.</p>'
+                 '<a href="mailto:%s?subject=%s" style="display:inline-block;background:#d9b97f;color:#101826;font:700 14px Arial;text-decoration:none;padding:11px 18px">Send my video</a>'
+                 '<p style="margin:10px 0 0;font-size:12px;color:#8a909a">By sending a video you are happy for DocNova to share it on our social media.</p></div></td></tr>'
+                 % (box, escape(review), box, escape(reply_to), quote('My DocNova video – order ' + n)))
+    return subject, text, invoices._email_html(None, base, heading, lead, button, url, extra)
 
 def send_customer_email(o, kind, message=''):
     if not shop.smtp_configured() or not o.get('email'):
